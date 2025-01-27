@@ -15,7 +15,7 @@ async function initDB() {
     CREATE TABLE IF NOT EXISTS chargers (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       userId TEXT NOT NULL,
-      chargerId TEXT NOT NULL UNIQUE,
+      chargerId TEXT NOT NULL UNIQUE
     );
   `);
   logger.info('SQLite: chargers table ready');
