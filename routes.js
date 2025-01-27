@@ -15,20 +15,19 @@ routes.post('/chargers', async (req, res) => {
     return res.status(400).json({ error: "Missing userId or chargerId" });
   }
 
-  const uniqueUrl = `${userId}-${chargerId}`;
   const db = await dbPromise;
 
   try {
     await db.run(`
-      INSERT INTO chargers (userId, chargerId, uniqueUrl)
-      VALUES (?, ?, ?)
-    `, [userId, chargerId, uniqueUrl]);
+      INSERT INTO chargers (userId, chargerId)
+      VALUES (?, ?)
+    `, [userId, chargerId]);
   } catch (err) {
     logger.error(err, 'Failed to insert charger');
     return res.status(400).json({ error: err.message });
   }
 
-  res.json({ ocppUrl: `ws://${cfg.host}:${cfg.port}/${uniqueUrl}` });
+  res.json({ ocppUrl: `ws://${cfg.host}:${cfg.port}`, identity: chargerId });
 });
 
 /** GET /connected
