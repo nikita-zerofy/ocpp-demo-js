@@ -26,7 +26,7 @@ httpServer.on('upgrade', ocppServer.handleUpgrade);
 
 ocppServer.on('client', async (client) => {
   logger.info(`Client connected with identity: ${client.identity}`);
-  const uniqueUrl = client.identity; // e.g. "user1-chargerA"
+  const uniqueUrl = client.identity;
 
   const db = await dbPromise;
   const row = await db.get(`
