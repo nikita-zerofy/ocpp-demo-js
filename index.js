@@ -4,21 +4,22 @@ import { RPCServer, createRPCError } from 'ocpp-rpc';
 import logger from './logger.js';
 import {connectedClients, dbPromise, initDB} from './db.js';
 import router from './routes.js';
+import config from './config.js';
+const cfg = config();
+
 const app = express();
 
 app.use(pinoHttp({ logger }));
 app.use(express.json());
 app.use(router);
 
-const PORT = process.env.PORT || 3000;
-
 const ocppServer = new RPCServer({
   protocols: ['ocpp1.6'],
   strictMode: true
 });
 
-const httpServer = app.listen(PORT, '0.0.0.0', () => {
-  logger.info(`HTTP server listening on http://localhost:${PORT}`);
+const httpServer = app.listen(cfg.port, '0.0.0.0', () => {
+  logger.info(`HTTP server listening on http://${cfg.host}:${cfg.port}`);
 });
 
 httpServer.on('upgrade', ocppServer.handleUpgrade);

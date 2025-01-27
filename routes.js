@@ -2,6 +2,7 @@ import router from 'express';
 import logger from './logger.js';
 import {connectedClients, dbPromise} from "./db.js";
 import config from './config.js';
+const cfg = config();
 
 const routes = router();
 
@@ -27,7 +28,7 @@ routes.post('/chargers', async (req, res) => {
     return res.status(400).json({ error: err.message });
   }
 
-  res.json({ ocppUrl: `ws://${config.host}:${config.port}/${uniqueUrl}` });
+  res.json({ ocppUrl: `ws://${cfg.host}:${cfg.port}/${uniqueUrl}` });
 });
 
 /** GET /connected
