@@ -26,15 +26,15 @@ httpServer.on('upgrade', ocppServer.handleUpgrade);
 
 ocppServer.on('client', async (client) => {
   logger.info(`Client connected with identity: ${client.identity}`);
-  const uniqueUrl = client.identity;
+  const chargerId = client.identity;
 
   const db = await dbPromise;
   const row = await db.get(`
-    SELECT * FROM chargers WHERE uniqueUrl = ?
-  `, uniqueUrl);
+    SELECT * FROM chargers WHERE chargerId = ?
+  `, chargerId);
 
   if (!row) {
-    logger.error(`No DB entry found for ${uniqueUrl}. Closing client.`);
+    logger.error(`No DB entry found for ${chargerId}. Closing client.`);
     client.close();
     return;
   }
