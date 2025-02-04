@@ -2,7 +2,7 @@ import express from 'express';
 import pinoHttp from 'pino-http';
 import { RPCServer, createRPCError } from 'ocpp-rpc';
 import logger from './logger.js';
-import {connectedClients, dbPromise, initDB} from './db.js';
+import {connectedClients, dbPromise, initDB, pendingChargingProfiles} from './db.js';
 import router from './routes.js';
 import config from './config.js';
 import sendRequestToClient from "./request.js";
@@ -59,8 +59,42 @@ ocppServer.on('client', async (client) => {
     };
   });
 
-  client.handle('StatusNotification', ({ params }) => {
+  client.handle('StatusNotification', async ({ params }) => {
     logger.info({ params }, `StatusNotification from ${client.identity}`);
+    if (params.status === "Charging") {
+      const pendingProfile = pendingChargingProfiles.get(client.identity);
+      if (pendingProfile?.transactionId) {
+        const { current, duration, transactionId } = pendingProfile;
+        const setChargingProfilePayload = {
+          connectorId: 1,
+          csChargingProfiles: {
+            chargingProfileId: 12345,
+            stackLevel: 1,
+            chargingProfilePurpose: "TxProfile",
+            chargingProfileKind: "Absolute",
+            transactionId: transactionId, // Use the actual transactionId
+            chargingSchedule: {
+              chargingRateUnit: "A",
+              duration: duration,
+              chargingSchedulePeriod: [{ startPeriod: 0, limit: current }]
+            }
+          }
+        };
+
+        try {
+          const profileResponse = await sendRequestToClient(
+            client.identity,
+            "SetChargingProfile",
+            setChargingProfilePayload
+          );
+          logger.info({ profileResponse }, 'Charging profile applied');
+        } catch (error) {
+          logger.error(error, 'Failed to apply charging profile');
+        }
+
+        pendingChargingProfiles.delete(client.identity);
+      }
+    }
     return {};
   });
 
@@ -73,18 +107,38 @@ ocppServer.on('client', async (client) => {
     };
   });
 
-  client.handle('StartTransaction', ({ params }) => {
-    logger.info({ params }, `StartTransaction from ${client.identity}`);
-
-    // Here, generate or retrieve your transactionId
-    // For testing purposes, we use a static id
-    const transactionId = 123;
-
+  client.handle('StartTransaction', async ({ params }) => {
+    const db = await dbPromise;
+    const { lastID: transactionId } = await db.run(`
+      INSERT INTO transactions (chargerId, idTag, meterStart)
+      VALUES (?, ?, ?)
+    `, [client.identity, params.idTag, params.meterStart]);
+    logger.info({ transactionId }, 'Transaction started');
+    const pendingProfile = pendingChargingProfiles.get(client.identity);
+    if (pendingProfile) {
+      pendingChargingProfiles.set(client.identity, {
+        ...pendingProfile,
+        transactionId // Link to the actual transactionId
+      });
+    }
     return {
       transactionId,
-      idTagInfo: {
-        status: "Accepted"
-      }
+      idTagInfo: { status: "Accepted" }
+    };
+  });
+
+  client.handle('StopTransaction', async ({ params }) => {
+    const db = await dbPromise;
+    await db.run(`
+    UPDATE transactions
+    SET stopTimestamp = CURRENT_TIMESTAMP,
+      meterEnd = ?,
+      status = 'completed'
+    WHERE transactionId = ?
+  `, [params.meterStop, params.transactionId]);
+    logger.info({ transactionId: params.transactionId }, 'Transaction stopped');
+    return {
+      idTagInfo: { status: "Accepted" }
     };
   });
 
@@ -117,15 +171,6 @@ ocppServer.on('client', async (client) => {
   client.handle('MeterValues', ({ params }) => {
     logger.info({ params }, `MeterValues from ${client.identity}`);
     return {};  // or just omit; returning {} is typical
-  });
-
-  client.handle('StopTransaction', ({ params }) => {
-    logger.info({ params }, `StopTransaction from ${client.identity}`);
-    return {
-      idTagInfo: {
-        status: "Accepted"
-      }
-    };
   });
 
   client.handle('DiagnosticsStatusNotification', ({ params }) => {

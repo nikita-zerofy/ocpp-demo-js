@@ -1,5 +1,5 @@
 import sqlite3 from 'sqlite3';
-import {open} from 'sqlite';
+import { open } from 'sqlite';
 import logger from './logger.js';
 
 const dbPromise = open({
@@ -8,6 +8,7 @@ const dbPromise = open({
 });
 
 const connectedClients = new Map();
+const pendingChargingProfiles = new Map();
 
 async function initDB() {
   const db = await dbPromise;
@@ -17,12 +18,25 @@ async function initDB() {
       userId TEXT NOT NULL,
       chargerId TEXT NOT NULL UNIQUE
     );
+
+    CREATE TABLE IF NOT EXISTS transactions (
+      transactionId INTEGER PRIMARY KEY AUTOINCREMENT,
+      chargerId TEXT NOT NULL,
+      idTag TEXT NOT NULL,
+      startTimestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+      stopTimestamp DATETIME,
+      meterStart INTEGER,
+      meterEnd INTEGER,
+      status TEXT CHECK(status IN ('active', 'completed', 'suspended')) DEFAULT 'active',
+      FOREIGN KEY (chargerId) REFERENCES chargers(chargerId)
+    );
   `);
-  logger.info('SQLite: chargers table ready');
+  logger.info('SQLite: tables initialized');
 }
 
 export {
   dbPromise,
   initDB,
-  connectedClients
+  connectedClients,
+  pendingChargingProfiles
 };

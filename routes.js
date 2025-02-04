@@ -1,6 +1,6 @@
 import router from 'express';
 import logger from './logger.js';
-import {connectedClients, dbPromise} from "./db.js";
+import {connectedClients, dbPromise, pendingChargingProfiles} from "./db.js";
 import config from './config.js';
 import sendRequestToClient from "./request.js";
 
@@ -49,50 +49,27 @@ routes.get('/persistent', async (req, res) => {
   res.json({ chargers: rows });
 });
 
-/** POST /charge/:clientId
- *  Instruct a connected client to RemoteStartTransaction with a charging profile
- *  Example body: { "desiredPower": 1500 }
- */
 routes.post('/charge/:clientId', async (req, res) => {
   const { clientId } = req.params;
   const { current, duration } = req.body;
-
   if (!current || !duration) {
     return res.status(400).json({ error: "current/duration is required" });
   }
-
   try {
-    const remoteStartTransactionPayload = {
-      idTag: "myIdTag123",
-      connectorId: 1
-    };
-    const response = await sendRequestToClient(clientId, "RemoteStartTransaction", remoteStartTransactionPayload);
-
-    const setChargingProfilePayload = {
-      connectorId: 1,
-      csChargingProfiles: {
-        chargingProfileId: 26771,
-        stackLevel: 1,
-        chargingProfilePurpose: "TxProfile",
-        chargingProfileKind: "Absolute",
-        transactionId: 123,
-        validFrom: new Date().toISOString(),
-        validTo: new Date(Date.now() + 3600000).toISOString(),
-        chargingSchedule: {
-          chargingRateUnit: "A",
-          duration: duration,
-          chargingSchedulePeriod: [
-            { startPeriod: 0, limit: current }
-          ]
-        }
-      }
-    };
-    const profileResponse = await sendRequestToClient(clientId, "SetChargingProfile", setChargingProfilePayload);
+    const response = await sendRequestToClient(
+      clientId,
+      "RemoteStartTransaction",
+      { idTag: "myIdTag123", connectorId: 1 }
+    );
+    pendingChargingProfiles.set(clientId, {
+      current,
+      duration,
+      transactionId: null // Will be updated later
+    });
 
     res.json({
-      message: "Charging started successfully",
-      details: response,
-      profileResponse
+      message: "Charging started. Profile will be applied once active.",
+      details: response
     });
   } catch (error) {
     logger.error(error, `Error starting charging for ${clientId}`);
@@ -133,6 +110,32 @@ routes.get('/config/:clientId', async (req, res) => {
     });
   } catch (error) {
     logger.error(error, `Error retrieving configuration for client ${clientId}`);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+routes.get('/transactions', async (req, res) => {
+  try {
+    const db = await dbPromise;
+    const { chargerId, status } = req.query;
+    let query = 'SELECT * FROM transactions';
+    const conditions = [];
+    const params = [];
+    if (chargerId) {
+      conditions.push('chargerId = ?');
+      params.push(chargerId);
+    }
+    if (status) {
+      conditions.push('status = ?');
+      params.push(status);
+    }
+    if (conditions.length > 0) {
+      query += ' WHERE ' + conditions.join(' AND ');
+    }
+    const transactions = await db.all(query, params);
+    res.json({ transactions });
+  } catch (error) {
+    logger.error(error, 'Failed to retrieve transactions');
     res.status(500).json({ error: error.message });
   }
 });
