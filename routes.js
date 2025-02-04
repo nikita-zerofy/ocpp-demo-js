@@ -2,6 +2,8 @@ import router from 'express';
 import logger from './logger.js';
 import {connectedClients, dbPromise} from "./db.js";
 import config from './config.js';
+import sendRequestToClient from "./request.js";
+
 const cfg = config();
 
 const routes = router();
@@ -53,42 +55,44 @@ routes.get('/persistent', async (req, res) => {
  */
 routes.post('/charge/:clientId', async (req, res) => {
   const { clientId } = req.params;
-  const { desiredPower } = req.body;
+  const { current, duration } = req.body;
 
-  if (!desiredPower) {
-    return res.status(400).json({ error: "desiredPower is required" });
+  if (!current || !duration) {
+    return res.status(400).json({ error: "current/duration is required" });
   }
 
   try {
-    // Build transaction-based profile
     const remoteStartTransactionPayload = {
       idTag: "myIdTag123",
+      connectorId: 1
+    };
+    const response = await sendRequestToClient(clientId, "RemoteStartTransaction", remoteStartTransactionPayload);
+
+    const setChargingProfilePayload = {
       connectorId: 1,
-      chargingProfile: {
-        chargingProfileId: 1,
+      csChargingProfiles: {
+        chargingProfileId: 26771,
         stackLevel: 1,
         chargingProfilePurpose: "TxProfile",
         chargingProfileKind: "Absolute",
+        transactionId: 123,
         validFrom: new Date().toISOString(),
         validTo: new Date(Date.now() + 3600000).toISOString(),
         chargingSchedule: {
-          duration: 3600,
-          chargingRateUnit: "W",
+          chargingRateUnit: "A",
+          duration: duration,
           chargingSchedulePeriod: [
-            {
-              startPeriod: 0,
-              limit: desiredPower,
-              numberPhases: 3
-            }
+            { startPeriod: 0, limit: current }
           ]
         }
       }
     };
+    const profileResponse = await sendRequestToClient(clientId, "SetChargingProfile", setChargingProfilePayload);
 
-    const response = await sendRequestToClient(clientId, "RemoteStartTransaction", remoteStartTransactionPayload);
     res.json({
       message: "Charging started successfully",
-      details: response
+      details: response,
+      profileResponse
     });
   } catch (error) {
     logger.error(error, `Error starting charging for ${clientId}`);
@@ -96,17 +100,41 @@ routes.post('/charge/:clientId', async (req, res) => {
   }
 });
 
-/**
- * Helper: Send a request to a connected client.
- */
-async function sendRequestToClient(clientId, method, params) {
-  const client = connectedClients.get(clientId);
-  if (!client) {
-    throw new Error(`Client with ID ${clientId} is not connected.`);
+routes.post('/stopCharging/:clientId', async (req, res) => {
+  const { clientId } = req.params;
+  const { transactionId } = req.body;
+
+  if (!transactionId) {
+    return res.status(400).json({ error: "transactionId is required" });
   }
-  const response = await client.call(method, params);
-  logger.info({ response }, `Response from ${clientId} for ${method}`);
-  return response;
-}
+
+  try {
+    const payload = { transactionId };
+    const response = await sendRequestToClient(clientId, "RemoteStopTransaction", payload);
+
+    res.json({
+      message: "Charging stopped successfully",
+      response
+    });
+  } catch (error) {
+    logger.error(error, `Error stopping charging for ${clientId}`);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+routes.get('/config/:clientId', async (req, res) => {
+  const { clientId } = req.params;
+  try {
+    const configResponse = await sendRequestToClient(clientId, "GetConfiguration", {});
+
+    res.json({
+      message: "Config retrieved successfully",
+      configResponse: configResponse
+    });
+  } catch (error) {
+    logger.error(error, `Error retrieving configuration for client ${clientId}`);
+    res.status(500).json({ error: error.message });
+  }
+});
 
 export default routes;
