@@ -21,8 +21,8 @@ routes.post('/chargers', async (req, res) => {
 
   try {
     await db.run(`
-      INSERT INTO chargers (userId, chargerId)
-      VALUES (?, ?)
+        INSERT INTO chargers (userId, chargerId)
+        VALUES (?, ?)
     `, [userId, chargerId]);
   } catch (err) {
     logger.error(err, 'Failed to insert charger');
@@ -32,23 +32,41 @@ routes.post('/chargers', async (req, res) => {
   res.json({ ocppUrl: `ws://${cfg.host}:${cfg.port}`, identity: chargerId });
 });
 
-/** GET /connected
- *  List the currently connected charger identities
+/** GET /chargers
+ *  Returns all chargers stored in the database.
  */
-routes.get('/connected', (req, res) => {
-  const clients = Array.from(connectedClients.keys());
-  res.json({ connectedClients: clients });
+routes.get('/chargers', async (req, res) => {
+  try {
+    const db = await dbPromise;
+    const rows = await db.all('SELECT * FROM chargers');
+    res.json({ chargers: rows });
+  } catch (error) {
+    logger.error(error, 'Failed to retrieve chargers');
+    res.status(500).json({ error: error.message });
+  }
 });
 
-/** GET /persistent
- *  Show all chargers from the DB (stored "persistently")
+/** GET /chargers/:chargerId
+ *  Returns details for a specific charger.
  */
-routes.get('/persistent', async (req, res) => {
-  const db = await dbPromise;
-  const rows = await db.all('SELECT * FROM chargers');
-  res.json({ chargers: rows });
+routes.get('/chargers/:chargerId', async (req, res) => {
+  const { chargerId } = req.params;
+  try {
+    const db = await dbPromise;
+    const charger = await db.get('SELECT * FROM chargers WHERE chargerId = ?', chargerId);
+    if (!charger) {
+      return res.status(404).json({ error: "Charger not found" });
+    }
+    res.json({ charger });
+  } catch (error) {
+    logger.error(error, 'Failed to retrieve charger by id');
+    res.status(500).json({ error: error.message });
+  }
 });
 
+/** POST /charge/:clientId
+ *  Start a charging session and store a pending charging profile.
+ */
 routes.post('/charge/:clientId', async (req, res) => {
   const { clientId } = req.params;
   const { current, duration } = req.body;
@@ -77,6 +95,9 @@ routes.post('/charge/:clientId', async (req, res) => {
   }
 });
 
+/** POST /stopCharging/:clientId
+ *  Stop a charging session using a provided transactionId.
+ */
 routes.post('/stopCharging/:clientId', async (req, res) => {
   const { clientId } = req.params;
   const { transactionId } = req.body;
@@ -99,6 +120,9 @@ routes.post('/stopCharging/:clientId', async (req, res) => {
   }
 });
 
+/** GET /config/:clientId
+ *  Retrieve configuration details from the charger.
+ */
 routes.get('/config/:clientId', async (req, res) => {
   const { clientId } = req.params;
   try {
@@ -106,7 +130,7 @@ routes.get('/config/:clientId', async (req, res) => {
 
     res.json({
       message: "Config retrieved successfully",
-      configResponse: configResponse
+      configResponse
     });
   } catch (error) {
     logger.error(error, `Error retrieving configuration for client ${clientId}`);
@@ -114,6 +138,9 @@ routes.get('/config/:clientId', async (req, res) => {
   }
 });
 
+/** GET /transactions
+ *  Retrieve transactions with optional filtering by chargerId and status.
+ */
 routes.get('/transactions', async (req, res) => {
   try {
     const db = await dbPromise;
@@ -138,6 +165,23 @@ routes.get('/transactions', async (req, res) => {
     logger.error(error, 'Failed to retrieve transactions');
     res.status(500).json({ error: error.message });
   }
+});
+
+/** GET /connected
+ *  List the currently connected charger identities
+ */
+routes.get('/connected', (req, res) => {
+  const clients = Array.from(connectedClients.keys());
+  res.json({ connectedClients: clients });
+});
+
+/** GET /persistent
+ *  Show all chargers from the DB (stored "persistently")
+ */
+routes.get('/persistent', async (req, res) => {
+  const db = await dbPromise;
+  const rows = await db.all('SELECT * FROM chargers');
+  res.json({ chargers: rows });
 });
 
 export default routes;

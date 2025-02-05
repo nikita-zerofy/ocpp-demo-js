@@ -2,14 +2,14 @@ import express from 'express';
 import pinoHttp from 'pino-http';
 import { RPCServer, createRPCError } from 'ocpp-rpc';
 import logger from './logger.js';
-import {connectedClients, dbPromise, initDB, pendingChargingProfiles} from './db.js';
+import { connectedClients, dbPromise, pendingChargingProfiles } from './db.js';
 import router from './routes.js';
 import config from './config.js';
 import sendRequestToClient from "./request.js";
+
 const cfg = config();
 
 const app = express();
-
 app.use(pinoHttp({ logger }));
 app.use(express.json());
 app.use(router);
@@ -25,15 +25,71 @@ const httpServer = app.listen(cfg.port, '0.0.0.0', () => {
 
 httpServer.on('upgrade', ocppServer.handleUpgrade);
 
+/**
+ * Update charger boot info based on BootNotification parameters.
+ * @param {string} chargerId
+ * @param {object} params - BootNotification parameters
+ */
+async function updateChargerBootInfo(chargerId, params) {
+  const db = await dbPromise;
+  await db.run(`
+    UPDATE chargers
+    SET vendor = ?,
+        model = ?,
+        serialNumber = ?,
+        firmwareVersion = ?
+    WHERE chargerId = ?
+  `, [
+    params.chargePointVendor,
+    params.chargePointModel,
+    params.chargePointSerialNumber,
+    params.firmwareVersion,
+    chargerId
+  ]);
+}
+
+/**
+ * Update charger status based on StatusNotification parameters.
+ * @param {string} chargerId
+ * @param {object} params - StatusNotification parameters
+ */
+async function updateChargerStatus(chargerId, params) {
+  const db = await dbPromise;
+  await db.run(`
+    UPDATE chargers
+    SET lastStatus = ?,
+        lastStatusTimestamp = ?,
+        errorCode = ?
+    WHERE chargerId = ?
+  `, [
+    params.status,
+    params.timestamp,
+    params.errorCode,
+    chargerId
+  ]);
+}
+
+/**
+ * Update the last heartbeat timestamp for a charger.
+ * @param {string} chargerId
+ * @param {string} heartbeatTimestamp - ISO formatted timestamp
+ */
+async function updateChargerHeartbeat(chargerId, heartbeatTimestamp) {
+  const db = await dbPromise;
+  await db.run(`
+    UPDATE chargers
+    SET lastHeartbeat = ?
+    WHERE chargerId = ?
+  `, [heartbeatTimestamp, chargerId]);
+}
+
 ocppServer.on('client', async (client) => {
   logger.info(`Client connected with identity: ${client.identity}`);
   const chargerId = client.identity;
-
   const db = await dbPromise;
-  const row = await db.get(`
-    SELECT * FROM chargers WHERE chargerId = ?
-  `, chargerId);
 
+  // Check if a charger record exists. If not, log error and close connection.
+  const row = await db.get(`SELECT * FROM chargers WHERE chargerId = ?`, chargerId);
   if (!row) {
     logger.error(`No DB entry found for ${chargerId}. Closing client.`);
     client.close();
@@ -43,8 +99,14 @@ ocppServer.on('client', async (client) => {
   connectedClients.set(client.identity, client);
   logger.info(`Charger connected: ${client.identity}`);
 
-  client.handle('BootNotification', ({ params }) => {
+  client.handle('BootNotification', async ({ params }) => {
     logger.info({ params }, `BootNotification from ${client.identity}`);
+    try {
+      // Update the charger record with boot details
+      await updateChargerBootInfo(client.identity, params);
+    } catch (err) {
+      logger.error(err, 'Failed to update charger boot info');
+    }
     return {
       status: "Accepted",
       interval: 300,
@@ -52,15 +114,29 @@ ocppServer.on('client', async (client) => {
     };
   });
 
-  client.handle('Heartbeat', ({ params }) => {
-    logger.info({ params }, `Heartbeat from ${client.identity}`);
+  client.handle('Heartbeat', async ({params}) => {
+    logger.info({params}, `Heartbeat from ${client.identity}`);
+    const heartbeatTimestamp = new Date().toISOString();
+    try {
+      await updateChargerHeartbeat(client.identity, heartbeatTimestamp);
+    } catch (err) {
+      logger.error(err, 'Failed to update charger boot info');
+    }
     return {
-      currentTime: new Date().toISOString()
+      currentTime: heartbeatTimestamp
     };
   });
 
   client.handle('StatusNotification', async ({ params }) => {
     logger.info({ params }, `StatusNotification from ${client.identity}`);
+    try {
+      // Update the charger record with the latest status information
+      await updateChargerStatus(client.identity, params);
+    } catch (err) {
+      logger.error(err, 'Failed to update charger status');
+    }
+
+    // If the charger is charging and a pending profile exists, apply it.
     if (params.status === "Charging") {
       const pendingProfile = pendingChargingProfiles.get(client.identity);
       if (pendingProfile?.transactionId) {
@@ -130,12 +206,12 @@ ocppServer.on('client', async (client) => {
   client.handle('StopTransaction', async ({ params }) => {
     const db = await dbPromise;
     await db.run(`
-    UPDATE transactions
-    SET stopTimestamp = CURRENT_TIMESTAMP,
-      meterEnd = ?,
-      status = 'completed'
-    WHERE transactionId = ?
-  `, [params.meterStop, params.transactionId]);
+      UPDATE transactions
+      SET stopTimestamp = CURRENT_TIMESTAMP,
+          meterEnd = ?,
+          status = 'completed'
+      WHERE transactionId = ?
+    `, [params.meterStop, params.transactionId]);
     logger.info({ transactionId: params.transactionId }, 'Transaction stopped');
     return {
       idTagInfo: { status: "Accepted" }
@@ -164,13 +240,12 @@ ocppServer.on('client', async (client) => {
     logger.info(`vendorId ${params.vendorId}`, params.vendorId); // save it
     return {
       status: "Accepted"
-      // data: "some optional response"
     };
   });
 
   client.handle('MeterValues', ({ params }) => {
     logger.info({ params }, `MeterValues from ${client.identity}`);
-    return {};  // or just omit; returning {} is typical
+    return {};
   });
 
   client.handle('DiagnosticsStatusNotification', ({ params }) => {
@@ -188,14 +263,8 @@ ocppServer.on('client', async (client) => {
     throw createRPCError("NotImplemented");
   });
 
-
   client.on('close', () => {
     connectedClients.delete(client.identity);
     logger.info(`Charger disconnected: ${client.identity}`);
   });
-});
-
-initDB().catch(err => {
-  logger.error(err, 'Failed to init DB');
-  process.exit(1);
 });

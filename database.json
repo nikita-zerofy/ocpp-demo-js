@@ -1,0 +1,7 @@
+{
+  "dev": {
+    "driver": "sqlite3",
+    "filename": "./chargers.db",
+    "multiple": true
+  }
+}

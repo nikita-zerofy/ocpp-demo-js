@@ -1,15 +1,18 @@
 {
   "name": "ocpp-ts",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "src/index.js",
   "type": "module",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "migrate": "npx db-migrate up --config database.json",
+    "migrate:down": "npx db-migrate down --config database.json"
   },
   "author": "",
   "license": "ISC",
   "description": "",
   "devDependencies": {
+    "db-migrate": "^0.11.14",
+    "db-migrate-sqlite3": "^1.0.2",
     "typescript": "^5.7.3"
   },
   "dependencies": {

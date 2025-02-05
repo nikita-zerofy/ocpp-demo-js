@@ -1,18 +1,21 @@
-import sqlite3 from 'sqlite3';
-import { open } from 'sqlite';
-import logger from './logger.js';
+'use strict';
 
-const dbPromise = open({
-  filename: './chargers.db',
-  driver: sqlite3.Database
-});
+var dbm;
+var type;
+var seed;
 
-const connectedClients = new Map();
-const pendingChargingProfiles = new Map();
+/**
+  * We receive the dbmigrate dependency from dbmigrate initially.
+  * This enables us to not have to rely on NODE_PATH.
+  */
+exports.setup = function(options, seedLink) {
+  dbm = options.dbmigrate;
+  type = dbm.dataType;
+  seed = seedLink;
+};
 
-async function initDB() {
-  const db = await dbPromise;
-  await db.exec(`
+exports.up = function (db) {
+  return db.runSql(`
     CREATE TABLE IF NOT EXISTS chargers (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       userId TEXT NOT NULL,
@@ -29,14 +32,17 @@ async function initDB() {
       meterEnd INTEGER,
       status TEXT CHECK(status IN ('active', 'completed', 'suspended')) DEFAULT 'active',
       FOREIGN KEY (chargerId) REFERENCES chargers(chargerId)
-    );
+      );
   `);
-  logger.info('SQLite: tables initialized');
-}
+};
 
-export {
-  dbPromise,
-  initDB,
-  connectedClients,
-  pendingChargingProfiles
+exports.down = function (db) {
+  return db.runSql(`
+    DROP TABLE IF EXISTS transactions;
+    DROP TABLE IF EXISTS chargers;
+  `);
+};
+
+exports._meta = {
+  "version": 1
 };
