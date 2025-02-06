@@ -175,6 +175,57 @@ routes.post('/triggerMessage/:clientId', async (req, res) => {
   }
 });
 
+/**
+ * POST /changeCurrent/:clientId
+ * Update the charging current for an active transaction.
+ *
+ * Expected payload:
+ * {
+ *   "transactionId": 123,  // Required: Active transaction ID
+ *   "duration": 3600,      // Required: Duration in seconds for the new profile
+ *   "desiredCurrent": 10   // Required: Desired current in Amps
+ * }
+ */
+routes.post('/changeCurrent/:clientId', async (req, res) => {
+  const { clientId } = req.params;
+  const { transactionId, desiredCurrent } = req.body;
+
+  if (!transactionId) {
+    return res.status(400).json({ error: "transactionId is required" });
+  }
+  if (!desiredCurrent) {
+    return res.status(400).json({ error: "desiredCurrent is required" });
+  }
+
+  const setChargingProfilePayload = {
+    connectorId: 1,
+    csChargingProfiles: {
+      chargingProfileId: 26771,
+      stackLevel: 1,
+      chargingProfilePurpose: "TxProfile",
+      chargingProfileKind: "Absolute",
+      transactionId: transactionId,
+      chargingSchedule: {
+        chargingRateUnit: "A",
+        chargingSchedulePeriod: [
+          { startPeriod: 0, limit: desiredCurrent }
+        ]
+      }
+    }
+  };
+
+  try {
+    const response = await sendRequestToClient(clientId, "SetChargingProfile", setChargingProfilePayload);
+    res.json({
+      message: "Charging current updated successfully",
+      details: response
+    });
+  } catch (error) {
+    logger.error(error, `Error updating charging current for ${clientId}`);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 /** GET /config/:clientId
  *  Retrieve configuration details from the charger.
  */
