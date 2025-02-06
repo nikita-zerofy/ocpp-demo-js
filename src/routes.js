@@ -120,6 +120,61 @@ routes.post('/stopCharging/:clientId', async (req, res) => {
   }
 });
 
+/**
+ * POST /chargeDefault/:clientId
+ * Start charging using default settings (without applying any charging profile).
+ * Example payload (if needed): {}
+ */
+routes.post('/chargeDefault/:clientId', async (req, res) => {
+  const { clientId } = req.params;
+  try {
+    const defaultPayload = { idTag: "defaultIdTag", connectorId: 1 };
+    const response = await sendRequestToClient(clientId, "RemoteStartTransaction", defaultPayload);
+    res.json({
+      message: "Charging started with default settings.",
+      details: response
+    });
+  } catch (error) {
+    logger.error(error, `Error starting charging with default settings for ${clientId}`);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * POST /triggerMessage/:clientId
+ * Triggers a TriggerMessage request to the specified charge point.
+ * Expected payload:
+ * {
+ *   "requestedMessage": "Heartbeat",  // or BootNotification, MeterValues, etc.
+ *   "connectorId": 1                 // optional, default is 1
+ * }
+ */
+routes.post('/triggerMessage/:clientId', async (req, res) => {
+  const { clientId } = req.params;
+  const { requestedMessage, connectorId } = req.body;
+
+  if (!requestedMessage) {
+    return res.status(400).json({ error: "requestedMessage is required" });
+  }
+
+  try {
+    const payload = {
+      requestedMessage,
+      connectorId: connectorId || 1
+    };
+
+    const response = await sendRequestToClient(clientId, "TriggerMessage", payload);
+
+    res.json({
+      message: "TriggerMessage request sent successfully",
+      details: response
+    });
+  } catch (error) {
+    logger.error(error, `Error triggering message for ${clientId}`);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 /** GET /config/:clientId
  *  Retrieve configuration details from the charger.
  */
