@@ -2,20 +2,23 @@
   "name": "ocpp-ts",
   "version": "1.0.0",
   "main": "src/index.js",
-  "type": "module",
   "scripts": {
-    "migrate": "npx db-migrate up --config database.json",
-    "migrate:down": "npx db-migrate down --config database.json"
+    "migrate": "node run-migrations.cjs up --config database.json",
+    "migrate:down": "node run-migrations.cjs down --config database.json",
+    "build": "tsc",
+    "start": "NODE_OPTIONS=\"--enable-source-maps\" node lib/index.js"
   },
   "author": "",
   "license": "ISC",
   "description": "",
   "devDependencies": {
+    "@types/node": "^22.13.1",
     "db-migrate": "^0.11.14",
     "db-migrate-sqlite3": "^1.0.2",
     "typescript": "^5.7.3"
   },
   "dependencies": {
+    "axios": "^1.7.9",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "ocpp-rpc": "^2.1.2",

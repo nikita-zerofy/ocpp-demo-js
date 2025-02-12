@@ -66,3 +66,5 @@ public/
 # Windows
 Thumbs.db
 /chargers.db
+
+/lib
