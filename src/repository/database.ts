@@ -1,16 +1,16 @@
 import {Charger} from "../model/charger";
 import {Transaction} from "../model/transaction";
 
-export interface IChargerRepository {
-  getCharger(chargerId: string): Promise<any>;
+export interface ChargerRepository {
+  getCharger(identity: string): Promise<Charger | null>;
   addCharger(charger: any): Promise<void>;
-  updateCharger(chargerId: string, updates: Charger): Promise<void>;
+  updateCharger(identity: string, updates: Charger): Promise<void>;
   getAllChargers(): Promise<Charger[]>;
 }
 
-export interface ITransactionRepository {
-  getTransaction(transactionId: string): Promise<any>;
-  getTransactions(filters: { chargerId?: string, status?: string }): Promise<Transaction[]>;
+export interface TransactionRepository {
+  getTransaction(transactionId: string): Promise<Transaction | null>;
+  getTransactions(filters: { identity?: string, status?: string }): Promise<Transaction[]>;
   addTransaction(transaction: Transaction): Promise<void>;
   updateTransaction(transactionId: string, updates: Partial<Transaction>): Promise<void>;
 }

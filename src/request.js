@@ -1,8 +1,8 @@
 /**
  * Helper: Send a request to a connected client.
  */
-import {connectedClients} from "./db.js";
-import logger from "./logger.js";
+import {connectedClients} from "./db";
+import logger from "./logger";
 
 const sendRequestToClient = async (clientId, method, params) => {
   const client = connectedClients.get(clientId);

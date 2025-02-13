@@ -1,8 +1,10 @@
 export class Charger {
   constructor(
-    public chargerId: string,
+    public identity: string,
     public userId: string,
     public dwellingId: string,
+    public serviceId: string,
+    public projectId: string,
     public vendor?: string,
     public model?: string,
     public serialNumber?: string,
@@ -12,6 +14,6 @@ export class Charger {
     public lastStatusTimestamp?: string,
     public errorCode?: string,
     public lastHeartbeat?: string,
-    public serviceId?: string
-  ) {}
+  ) {
+  }
 }

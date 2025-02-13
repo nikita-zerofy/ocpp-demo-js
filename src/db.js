@@ -1,30 +1,30 @@
 import sqlite3 from 'sqlite3';
-import { open } from 'sqlite';
-import {ChargerRepository} from "./repository/sqlite/charger-repository.js";
-import {TransactionRepository} from "./repository/sqlite/transaction-repository.js";
+import {open} from 'sqlite';
+import {SqliteChargerRepository} from './repository/sqlite/sqlite-charger-repository';
+import {SqliteTransactionRepository} from './repository/sqlite/sqlite-transaction-repository';
 
 const dbPromise = open({
   filename: './chargers.db',
+  mode: sqlite3.OPEN_READWRITE,
   driver: sqlite3.Database
 });
 
 const connectedClients = new Map();
 const pendingChargingProfiles = new Map();
 
-const createChargerRepository = async () => {
-  const db = await dbPromise;
-  return new ChargerRepository(db);
-}
+let chargerRepository;
+let transactionRepository;
 
-const createTransactionRepository = async () => {
+(async () => {
   const db = await dbPromise;
-  return new TransactionRepository(db);
-}
+  chargerRepository = new SqliteChargerRepository(db);
+  transactionRepository = new SqliteTransactionRepository(db);
+})();
 
 export {
   dbPromise,
   connectedClients,
   pendingChargingProfiles,
-  createChargerRepository,
-  createTransactionRepository
+  chargerRepository,
+  transactionRepository
 };

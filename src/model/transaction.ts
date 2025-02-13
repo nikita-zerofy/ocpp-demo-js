@@ -1,7 +1,7 @@
 export class Transaction {
   constructor(
     public transactionId: string,
-    public chargerId: string,
+    public identity: string,
     public idTag: string,
     public meterStart: number,
     public meterEnd?: number | null,
@@ -10,7 +10,7 @@ export class Transaction {
     public stopTimestamp?: string | null
   ) {
     this.transactionId = transactionId;
-    this.chargerId = chargerId;
+    this.identity = identity;
     this.idTag = idTag;
     this.meterStart = meterStart;
     this.status = status;
