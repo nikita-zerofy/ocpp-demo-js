@@ -5,7 +5,7 @@
   "scripts": {
     "migrate": "node run-migrations.cjs up --config database.json",
     "migrate:down": "node run-migrations.cjs down --config database.json",
-    "build": "tsc --watch",
+    "build": "tsc",
     "start": "NODE_OPTIONS=\"--enable-source-maps\" node lib/index.js",
     "test": "jest"
   },
