@@ -1,8 +1,8 @@
 import DBMigrate from 'db-migrate';
-import logger from "./src/logger.js";
+import logger from './src/logger.ts';
 
 export async function runMigrations() {
-  const dbm = DBMigrate.getInstance(true, {config: 'database.json'});
+  const dbm = DBMigrate.getInstance(true, {config: 'repository.json'});
   try {
     await dbm.up();
     logger.info('Migrations applied successfully.');
