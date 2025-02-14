@@ -6,7 +6,7 @@ import {SqliteTransactionRepository} from './repository/sqlite/sqlite-transactio
 const dbPromise = open({
   filename: './chargers.db',
   mode: sqlite3.OPEN_READWRITE,
-  driver: sqlite3.Database
+  driver: sqlite3.Database,
 });
 
 const connectedClients = new Map();
@@ -21,10 +21,4 @@ let transactionRepository;
   transactionRepository = new SqliteTransactionRepository(db);
 })();
 
-export {
-  dbPromise,
-  connectedClients,
-  pendingChargingProfiles,
-  chargerRepository,
-  transactionRepository
-};
+export {dbPromise, connectedClients, pendingChargingProfiles, chargerRepository, transactionRepository};

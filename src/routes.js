@@ -5,9 +5,8 @@ import config from './config';
 import sendRequestToClient from './request';
 import {chargerRepository, transactionRepository} from './db';
 import {Charger} from './model/charger';
-import {randomUUID} from "node:crypto";
+import {randomUUID} from 'node:crypto';
 
-const cfg = config();
 
 const routes = express.Router();
 
@@ -19,14 +18,14 @@ routes.post('/chargers', async (req, res) => {
   const {userId, dwellingId, serviceId, projectId} = req.body;
   if (!userId || !dwellingId || !serviceId || !projectId) {
     logger.warn('[/chargers] Missing required fields.', {userId, dwellingId, serviceId, projectId});
-    return res.status(400).json({error: "Missing userId, dwellingId, serviceId or projectId"});
+    return res.status(400).json({error: 'Missing userId, dwellingId, serviceId or projectId'});
   }
   try {
     const charger = new Charger(randomUUID().toUpperCase(), userId, dwellingId, serviceId, projectId);
     logger.debug('[/chargers] New charger created.', {charger});
     await chargerRepository.addCharger(charger);
     logger.info('[/chargers] Charger added to repository.', {identity: charger.identity});
-    res.json({ocppUrl: `ws://${cfg.host}:${cfg.port}`, identity: charger.identity});
+    res.json({ocppUrl: `ws://${config.host}:${config.port}`, identity: charger.identity});
   } catch (err) {
     logger.error(err, '[/chargers] Failed to insert charger.');
     return res.status(400).json({error: err.message});
@@ -58,7 +57,7 @@ routes.get('/chargers/:identity', async (req, res) => {
     const charger = await chargerRepository.getCharger(identity);
     if (!charger) {
       logger.warn(`[/chargers/${identity}] Charger not found.`);
-      return res.status(404).json({error: "Charger not found"});
+      return res.status(404).json({error: 'Charger not found'});
     }
     logger.info(`[/chargers/${identity}] Charger details retrieved.`, {charger});
     res.json({charger});
@@ -77,24 +76,23 @@ routes.post('/charge/:clientId', async (req, res) => {
   const {current, duration} = req.body;
   if (!current || !duration) {
     logger.warn(`[/charge/${clientId}] Missing current or duration in request.`);
-    return res.status(400).json({error: "current/duration is required"});
+    return res.status(400).json({error: 'current/duration is required'});
   }
   try {
     logger.debug(`[/charge/${clientId}] Sending RemoteStartTransaction request.`);
-    const response = await sendRequestToClient(
-      clientId,
-      "RemoteStartTransaction",
-      {idTag: "myIdTag123", connectorId: 1}
-    );
+    const response = await sendRequestToClient(clientId, 'RemoteStartTransaction', {
+      idTag: 'myIdTag123',
+      connectorId: 1,
+    });
     pendingChargingProfiles.set(clientId, {
       current,
       duration,
-      transactionId: null // Will be updated later
+      transactionId: null, // Will be updated later
     });
     logger.info(`[/charge/${clientId}] Charging started. Pending profile stored.`, {profile: {current, duration}});
     res.json({
-      message: "Charging started. Profile will be applied once active.",
-      details: response
+      message: 'Charging started. Profile will be applied once active.',
+      details: response,
     });
   } catch (error) {
     logger.error(error, `[/charge/${clientId}] Error starting charging.`);
@@ -111,16 +109,16 @@ routes.post('/stopCharging/:clientId', async (req, res) => {
   const {transactionId} = req.body;
   if (!transactionId) {
     logger.warn(`[/stopCharging/${clientId}] Missing transactionId.`);
-    return res.status(400).json({error: "transactionId is required"});
+    return res.status(400).json({error: 'transactionId is required'});
   }
   try {
     const payload = {transactionId};
     logger.debug(`[/stopCharging/${clientId}] Sending RemoteStopTransaction request with payload:`, payload);
-    const response = await sendRequestToClient(clientId, "RemoteStopTransaction", payload);
+    const response = await sendRequestToClient(clientId, 'RemoteStopTransaction', payload);
     logger.info(`[/stopCharging/${clientId}] Charging stopped successfully for transactionId: ${transactionId}`);
     res.json({
-      message: "Charging stopped successfully",
-      response
+      message: 'Charging stopped successfully',
+      response,
     });
   } catch (error) {
     logger.error(error, `[/stopCharging/${clientId}] Error stopping charging.`);
@@ -137,13 +135,13 @@ routes.post('/chargeDefault/:clientId', async (req, res) => {
   const {clientId} = req.params;
   logger.info(`[/chargeDefault/${clientId}] Received request to start charging with default settings.`);
   try {
-    const defaultPayload = {idTag: "defaultIdTag", connectorId: 1};
+    const defaultPayload = {idTag: 'defaultIdTag', connectorId: 1};
     logger.debug(`[/chargeDefault/${clientId}] Sending RemoteStartTransaction with default payload:`, defaultPayload);
-    const response = await sendRequestToClient(clientId, "RemoteStartTransaction", defaultPayload);
+    const response = await sendRequestToClient(clientId, 'RemoteStartTransaction', defaultPayload);
     logger.info(`[/chargeDefault/${clientId}] Charging started with default settings.`);
     res.json({
-      message: "Charging started with default settings.",
-      details: response
+      message: 'Charging started with default settings.',
+      details: response,
     });
   } catch (error) {
     logger.error(error, `[/chargeDefault/${clientId}] Error starting charging with default settings.`);
@@ -166,19 +164,19 @@ routes.post('/triggerMessage/:clientId', async (req, res) => {
   const {requestedMessage, connectorId} = req.body;
   if (!requestedMessage) {
     logger.warn(`[/triggerMessage/${clientId}] Missing requestedMessage.`);
-    return res.status(400).json({error: "requestedMessage is required"});
+    return res.status(400).json({error: 'requestedMessage is required'});
   }
   try {
     const payload = {
       requestedMessage,
-      connectorId: connectorId || 1
+      connectorId: connectorId || 1,
     };
     logger.debug(`[/triggerMessage/${clientId}] Sending TriggerMessage with payload:`, payload);
-    const response = await sendRequestToClient(clientId, "TriggerMessage", payload);
+    const response = await sendRequestToClient(clientId, 'TriggerMessage', payload);
     logger.info(`[/triggerMessage/${clientId}] TriggerMessage request sent successfully.`);
     res.json({
-      message: "TriggerMessage request sent successfully",
-      details: response
+      message: 'TriggerMessage request sent successfully',
+      details: response,
     });
   } catch (error) {
     logger.error(error, `[/triggerMessage/${clientId}] Error triggering message.`);
@@ -204,11 +202,11 @@ routes.post('/changeCurrent/:clientId', async (req, res) => {
 
   if (!transactionId) {
     logger.warn(`[/changeCurrent/${clientId}] Missing transactionId.`);
-    return res.status(400).json({error: "transactionId is required"});
+    return res.status(400).json({error: 'transactionId is required'});
   }
   if (!desiredCurrent) {
     logger.warn(`[/changeCurrent/${clientId}] Missing desiredCurrent.`);
-    return res.status(400).json({error: "desiredCurrent is required"});
+    return res.status(400).json({error: 'desiredCurrent is required'});
   }
 
   const setChargingProfilePayload = {
@@ -216,23 +214,23 @@ routes.post('/changeCurrent/:clientId', async (req, res) => {
     csChargingProfiles: {
       chargingProfileId: 26771,
       stackLevel: 1,
-      chargingProfilePurpose: "TxProfile",
-      chargingProfileKind: "Absolute",
+      chargingProfilePurpose: 'TxProfile',
+      chargingProfileKind: 'Absolute',
       transactionId: transactionId,
       chargingSchedule: {
-        chargingRateUnit: "A",
-        chargingSchedulePeriod: [{startPeriod: 0, limit: desiredCurrent}]
-      }
-    }
+        chargingRateUnit: 'A',
+        chargingSchedulePeriod: [{startPeriod: 0, limit: desiredCurrent}],
+      },
+    },
   };
 
   try {
     logger.debug(`[/changeCurrent/${clientId}] Sending SetChargingProfile with payload:`, setChargingProfilePayload);
-    const response = await sendRequestToClient(clientId, "SetChargingProfile", setChargingProfilePayload);
+    const response = await sendRequestToClient(clientId, 'SetChargingProfile', setChargingProfilePayload);
     logger.info(`[/changeCurrent/${clientId}] Charging current updated successfully.`);
     res.json({
-      message: "Charging current updated successfully",
-      details: response
+      message: 'Charging current updated successfully',
+      details: response,
     });
   } catch (error) {
     logger.error(error, `[/changeCurrent/${clientId}] Error updating charging current.`);
@@ -247,11 +245,11 @@ routes.get('/config/:clientId', async (req, res) => {
   const {clientId} = req.params;
   logger.info(`[/config/${clientId}] Received request for charger configuration.`);
   try {
-    const configResponse = await sendRequestToClient(clientId, "GetConfiguration", {});
+    const configResponse = await sendRequestToClient(clientId, 'GetConfiguration', {});
     logger.info(`[/config/${clientId}] Configuration retrieved successfully.`);
     res.json({
-      message: "Config retrieved successfully",
-      configResponse
+      message: 'Config retrieved successfully',
+      configResponse,
     });
   } catch (error) {
     logger.error(error, `[/config/${clientId}] Error retrieving configuration.`);

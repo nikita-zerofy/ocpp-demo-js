@@ -1,11 +1,11 @@
 import {TransactionRepository} from '../database.js';
 import {Database} from 'sqlite';
-import {Transaction} from "../../model/transaction";
-import logger from "../../logger";
+import {Transaction} from '../../model/transaction';
+import logger from '../../logger';
 
 export class SqliteTransactionRepository implements TransactionRepository {
   constructor(private db: Database) {
-    logger.info("SqliteTransactionRepository instantiated.");
+    logger.info('SqliteTransactionRepository instantiated.');
   }
 
   async getTransaction(transactionId: string): Promise<Transaction | null> {
@@ -37,7 +37,7 @@ export class SqliteTransactionRepository implements TransactionRepository {
     }
   }
 
-  async getTransactions(filters: { identity?: string, status?: string }): Promise<Transaction[]> {
+  async getTransactions(filters: {identity?: string; status?: string}): Promise<Transaction[]> {
     logger.info(`Entering getTransactions with filters: ${JSON.stringify(filters)}`);
     try {
       const {identity, status} = filters;
@@ -58,20 +58,23 @@ export class SqliteTransactionRepository implements TransactionRepository {
       const rows = await this.db.all(query, ...params);
       logger.info(`Query result: ${JSON.stringify(rows)}`);
 
-      const transactions = rows.map(row => new Transaction(
-        row.transactionId,
-        row.identity,
-        row.idTag,
-        row.meterStart,
-        row.meterEnd,
-        row.status,
-        row.startTimestamp,
-        row.stopTimestamp
-      ));
+      const transactions = rows.map(
+        (row) =>
+          new Transaction(
+            row.transactionId,
+            row.identity,
+            row.idTag,
+            row.meterStart,
+            row.meterEnd,
+            row.status,
+            row.startTimestamp,
+            row.stopTimestamp
+          )
+      );
       logger.info(`Retrieved ${transactions.length} transaction(s).`);
       return transactions;
     } catch (error) {
-      logger.error("Error in getTransactions", error);
+      logger.error('Error in getTransactions', error);
       throw error;
     }
   }
@@ -94,7 +97,9 @@ export class SqliteTransactionRepository implements TransactionRepository {
   }
 
   async updateTransaction(transactionId: string, updates: Partial<Transaction>): Promise<void> {
-    logger.info(`Entering updateTransaction for transactionId: ${transactionId} with updates: ${JSON.stringify(updates)}`);
+    logger.info(
+      `Entering updateTransaction for transactionId: ${transactionId} with updates: ${JSON.stringify(updates)}`
+    );
     try {
       const {meterEnd, status} = updates;
       await this.db.run(

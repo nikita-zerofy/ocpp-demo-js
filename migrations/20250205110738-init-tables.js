@@ -29,7 +29,7 @@ exports.up = function (db) {
     lastStatus: {type: 'string'},
     lastStatusTimestamp: {type: 'datetime'},
     errorCode: {type: 'string'},
-    firstBootNotificationReceived: {type: 'boolean', defaultValue: false}
+    firstBootNotificationReceived: {type: 'boolean', defaultValue: false},
   });
 };
 
@@ -38,5 +38,5 @@ exports.down = function (db) {
 };
 
 exports._meta = {
-  "version": 1
+  version: 1,
 };

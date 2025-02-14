@@ -41,7 +41,7 @@
     "suppressExcessPropertyErrors": false,
     "suppressImplicitAnyIndexErrors": false,
     "noStrictGenericChecks": false,
-    "strict": true,
+    "strict": true
   },
   "compileOnSave": true,
   "include": ["src/**/*"],

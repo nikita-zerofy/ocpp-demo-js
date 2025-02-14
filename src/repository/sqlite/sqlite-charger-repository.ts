@@ -1,7 +1,7 @@
 import {ChargerRepository} from '../database';
 import {Database} from 'sqlite';
-import {Charger} from "../../model/charger";
-import logger from "../../logger";
+import {Charger} from '../../model/charger';
+import logger from '../../logger';
 
 export class SqliteChargerRepository implements ChargerRepository {
   constructor(private db: Database) {
@@ -33,7 +33,7 @@ export class SqliteChargerRepository implements ChargerRepository {
         row.lastStatus,
         row.lastStatusTimestamp,
         row.errorCode,
-        row.lastHeartbeat,
+        row.lastHeartbeat
       );
       logger.info(`Charger retrieved for identity: ${identity}`);
       return charger;
@@ -125,30 +125,33 @@ export class SqliteChargerRepository implements ChargerRepository {
   }
 
   async getAllChargers(): Promise<Charger[]> {
-    logger.info("Entering getAllChargers");
+    logger.info('Entering getAllChargers');
     try {
       const rows = await this.db.all('SELECT * FROM chargers');
       logger.debug({rows}, `Query result for all chargers`);
-      const chargers = rows.map(row => new Charger(
-        row.identity,
-        row.userId,
-        row.dwellingId,
-        row.serviceId,
-        row.projectId,
-        row.vendor,
-        row.model,
-        row.serialNumber,
-        row.firmwareVersion,
-        row.firstBootNotificationReceived,
-        row.lastStatus,
-        row.lastStatusTimestamp,
-        row.errorCode,
-        row.lastHeartbeat,
-      ));
+      const chargers = rows.map(
+        (row) =>
+          new Charger(
+            row.identity,
+            row.userId,
+            row.dwellingId,
+            row.serviceId,
+            row.projectId,
+            row.vendor,
+            row.model,
+            row.serialNumber,
+            row.firmwareVersion,
+            row.firstBootNotificationReceived,
+            row.lastStatus,
+            row.lastStatusTimestamp,
+            row.errorCode,
+            row.lastHeartbeat
+          )
+      );
       logger.info(`Retrieved ${chargers.length} charger(s).`);
       return chargers;
     } catch (error) {
-      logger.error("Error in getAllChargers", error);
+      logger.error('Error in getAllChargers', error);
       throw error;
     }
   }

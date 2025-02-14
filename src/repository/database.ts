@@ -1,5 +1,5 @@
-import {Charger} from "../model/charger";
-import {Transaction} from "../model/transaction";
+import {Charger} from '../model/charger';
+import {Transaction} from '../model/transaction';
 
 export interface ChargerRepository {
   getCharger(identity: string): Promise<Charger | null>;
@@ -10,7 +10,7 @@ export interface ChargerRepository {
 
 export interface TransactionRepository {
   getTransaction(transactionId: string): Promise<Transaction | null>;
-  getTransactions(filters: { identity?: string, status?: string }): Promise<Transaction[]>;
+  getTransactions(filters: {identity?: string; status?: string}): Promise<Transaction[]>;
   addTransaction(transaction: Transaction): Promise<void>;
   updateTransaction(transactionId: string, updates: Partial<Transaction>): Promise<void>;
 }

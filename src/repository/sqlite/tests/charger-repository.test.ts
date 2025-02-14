@@ -51,10 +51,10 @@ describe('SqliteChargerRepository', () => {
       'TestModel',
       'TestSerial',
       '1.0.0',
-      true,                         // firstBootNotificationReceived
-      'Available',                     // lastStatus
+      true, // firstBootNotificationReceived
+      'Available', // lastStatus
       '2025-01-01T00:00:00Z',
-      "null",                            // errorCode
+      'null', // errorCode
       '2025-01-01T00:00:00Z'
     );
 

@@ -23,7 +23,7 @@ exports.up = function (db) {
     meterEnd: {type: 'int', nullable: true},
     status: {type: 'string', nullable: true},
     startTimestamp: {type: 'datetime', nullable: true},
-    stopTimestamp: {type: 'datetime', nullable: true}
+    stopTimestamp: {type: 'datetime', nullable: true},
   });
 };
 
@@ -32,5 +32,5 @@ exports.down = function (db) {
 };
 
 exports._meta = {
-  "version": 1
+  version: 1,
 };

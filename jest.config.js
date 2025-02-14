@@ -1,6 +1,6 @@
 module.exports = {
   testEnvironment: 'node',
-  testPathIgnorePatterns: ["/lib/"],
+  testPathIgnorePatterns: ['/lib/'],
   transform: {
     '^.+\\.[tj]sx?$': 'babel-jest',
   },
