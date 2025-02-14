@@ -16,10 +16,8 @@ import axios from "axios";
 
 const cfg = config();
 
-// NOTE: These are defined in the db module. If you need to reassign them locally, do so here.
-
 async function updateChargerBootInfo(identity, params) {
-  logger.debug(`Updating boot info for ${identity} with params: ${JSON.stringify(params)}`);
+  logger.debug({params}, `Updating boot info for ${identity} with params`);
   await chargerRepository.updateCharger(identity, {
     vendor: params.chargePointVendor,
     model: params.chargePointModel,
@@ -30,7 +28,7 @@ async function updateChargerBootInfo(identity, params) {
 }
 
 async function updateChargerStatus(identity, params) {
-  logger.debug(`Updating status for ${identity} with params: ${JSON.stringify(params)}`);
+  logger.debug({params}, `Updating status for ${identity} with params`);
   await chargerRepository.updateCharger(identity, {
     lastStatus: params.status,
     lastStatusTimestamp: params.timestamp,
@@ -40,7 +38,7 @@ async function updateChargerStatus(identity, params) {
 }
 
 async function updateChargerHeartbeat(identity, heartbeatTimestamp) {
-  logger.debug(`Updating heartbeat for ${identity} at ${heartbeatTimestamp}`);
+  logger.debug({heartbeatTimestamp}, `Updating heartbeat for ${identity}`);
   await chargerRepository.updateCharger(identity, {
     lastHeartbeat: heartbeatTimestamp
   });
@@ -66,55 +64,20 @@ httpServer.on('upgrade', (req, socket, head) => {
   ocppServer.handleUpgrade(req, socket, head);
 });
 
-const failedConnections = new Map(); // Map<identity, { count: number, lastAttempt: number }>
-const MAX_FAILED_ATTEMPTS = 3;
-const BAN_TIME_MS = 30 * 1000; // Ban for 30 seconds
-
-
 ocppServer.on('client', async (client) => {
   const identity = client.identity;
   logger.info(`Client connected with identity: ${identity}`);
 
-  // Check if this identity has recent failed attempts.
-  const failureRecord = failedConnections.get(identity);
-  if (failureRecord) {
-    const timeSinceLastAttempt = Date.now() - failureRecord.lastAttempt;
-    if (failureRecord.count >= MAX_FAILED_ATTEMPTS && timeSinceLastAttempt < BAN_TIME_MS) {
-      logger.warn(`Spamming detected for identity ${identity}. Ignoring connection (ban active).`);
-      client.close();
-      return;
-    } else if (timeSinceLastAttempt >= BAN_TIME_MS) {
-      // Ban period expired; reset record.
-      failedConnections.delete(identity);
-    }
-  }
-
   logger.debug(`Looking up charger for identity: ${identity}`);
   const charger = await chargerRepository.getCharger(identity);
-  logger.info(`Entering getCharger with identity: ${identity} charger ${JSON.stringify(charger)}`);
+  logger.info({charger}, `Entering getCharger with identity: ${identity}`);
 
   if (!charger) {
     logger.error(`No DB entry found for ${identity}. Closing client.`);
-    // Update the failure record for this identity.
-    const now = Date.now();
-    if (failedConnections.has(identity)) {
-      const record = failedConnections.get(identity);
-      record.count++;
-      record.lastAttempt = now;
-      failedConnections.set(identity, record);
-    } else {
-      failedConnections.set(identity, {count: 1, lastAttempt: now});
-    }
     client.close();
     return;
   }
 
-  // If a valid charger is found, clear any failure record.
-  if (failedConnections.has(identity)) {
-    failedConnections.delete(identity);
-  }
-
-  // Process valid client connection...
   connectedClients.set(identity, client);
   logger.info(`Charger connected: ${identity}`);
 
@@ -134,15 +97,16 @@ ocppServer.on('client', async (client) => {
             service: charger.serviceId,
             deviceData: {
               identity: client.identity,
-              chargePointVendor: params.chargePointVendor,
-              vendor: params.chargePointModel,
+              vendor: params.chargePointVendor,
+              model: params.chargePointModel,
               serialNumber: params.chargePointSerialNumber,
               firmwareVersion: params.firmwareVersion
             }
           };
-          logger.debug(`Sending service creation payload: ${payload}`);
+          logger.debug({payload}, `Sending service creation`);
           const response = await axios.post('http://127.0.0.1:5001/zerofy-energy-dev/europe-west1/connectOcppDevices', payload);
-          logger.debug(`[BootNotification] Service creation response for userId ${charger.userId} ${response.data}`, {response: response.data});
+          const responseData = response.data;
+          logger.debug({responseData}, `[BootNotification] Service creation response for userId ${charger.userId}`);
           if (response.status === 200) {
             await chargerRepository.updateCharger(client.identity, {firstBootNotificationReceived: true});
             logger.info(`firstBootNotificationReceived flag updated for ${client.identity}`);
@@ -177,7 +141,7 @@ ocppServer.on('client', async (client) => {
     const responsePayload = {
       currentTime: heartbeatTimestamp
     };
-    logger.debug(`Heartbeat response for ${client.identity}: ${JSON.stringify(responsePayload)}`);
+    logger.debug({responsePayload}, `Heartbeat response for ${client.identity}`);
     return responsePayload;
   });
 
@@ -194,7 +158,7 @@ ocppServer.on('client', async (client) => {
       logger.info(`Charging status detected for ${client.identity}`);
       const pendingProfile = pendingChargingProfiles.get(client.identity);
       if (pendingProfile?.transactionId) {
-        logger.info(`Found pending charging profile for ${client.identity}: ${JSON.stringify(pendingProfile)}`);
+        logger.info({pendingProfile},`Found pending charging profile for ${client.identity}`);
         const {current, duration, transactionId} = pendingProfile;
         const setChargingProfilePayload = {
           connectorId: 1,
@@ -211,7 +175,7 @@ ocppServer.on('client', async (client) => {
             }
           }
         };
-        logger.debug(`SetChargingProfile payload for ${client.identity}: ${JSON.stringify(setChargingProfilePayload)}`);
+        logger.debug({setChargingProfilePayload},`SetChargingProfile payload for ${client.identity}`);
 
         try {
           const profileResponse = await sendRequestToClient(

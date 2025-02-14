@@ -12,7 +12,7 @@ export class SqliteChargerRepository implements ChargerRepository {
     logger.info(`Entering getCharger with identity: ${identity}`);
     try {
       const row = await this.db.get('SELECT * FROM chargers WHERE identity = ?', identity);
-      logger.info(`Query result for identity ${identity}: ${JSON.stringify(row)}`);
+      logger.info({row}, `Query result for identity ${identity}`);
 
       if (!row) {
         logger.info(`No charger found for identity: ${identity}`);
@@ -64,24 +64,59 @@ export class SqliteChargerRepository implements ChargerRepository {
   async updateCharger(identity: string, updates: Partial<Charger>): Promise<void> {
     logger.info(`Entering updateCharger for identity: ${identity} with updates: ${JSON.stringify(updates)}`);
     try {
-      const {vendor, model, serialNumber, firmwareVersion, firstBootNotificationReceived} = updates;
-      await this.db.run(
-        `
-            UPDATE chargers
-            SET vendor                        = ?,
-                model                         = ?,
-                serialNumber                  = ?,
-                firmwareVersion               = ?,
-                firstBootNotificationReceived = ?
-            WHERE identity = ?
-        `,
-        vendor,
-        model,
-        serialNumber,
-        firmwareVersion,
-        firstBootNotificationReceived,
-        identity
-      );
+      const columns: string[] = [];
+      const values: any[] = [];
+
+      if (updates.vendor !== undefined) {
+        columns.push('vendor = ?');
+        values.push(updates.vendor);
+      }
+      if (updates.model !== undefined) {
+        columns.push('model = ?');
+        values.push(updates.model);
+      }
+      if (updates.serialNumber !== undefined) {
+        columns.push('serialNumber = ?');
+        values.push(updates.serialNumber);
+      }
+      if (updates.firmwareVersion !== undefined) {
+        columns.push('firmwareVersion = ?');
+        values.push(updates.firmwareVersion);
+      }
+      if (updates.firstBootNotificationReceived !== undefined) {
+        columns.push('firstBootNotificationReceived = ?');
+        values.push(updates.firstBootNotificationReceived);
+      }
+      if (updates.lastStatus !== undefined) {
+        columns.push('lastStatus = ?');
+        values.push(updates.lastStatus);
+      }
+      if (updates.lastStatusTimestamp !== undefined) {
+        columns.push('lastStatusTimestamp = ?');
+        values.push(updates.lastStatusTimestamp);
+      }
+      if (updates.errorCode !== undefined) {
+        columns.push('errorCode = ?');
+        values.push(updates.errorCode);
+      }
+      if (updates.lastHeartbeat !== undefined) {
+        columns.push('lastHeartbeat = ?');
+        values.push(updates.lastHeartbeat);
+      }
+
+      if (columns.length === 0) {
+        logger.info(`No updates provided for identity: ${identity}`);
+        return;
+      }
+
+      values.push(identity);
+
+      const sql = `
+          UPDATE chargers
+          SET ${columns.join(', ')}
+          WHERE identity = ?
+      `;
+      await this.db.run(sql, ...values);
       logger.info(`Charger updated for identity: ${identity}`);
     } catch (error) {
       logger.error(`Error in updateCharger for identity: ${identity}`, error);
@@ -93,7 +128,7 @@ export class SqliteChargerRepository implements ChargerRepository {
     logger.info("Entering getAllChargers");
     try {
       const rows = await this.db.all('SELECT * FROM chargers');
-      logger.debug(`Query result for all chargers: ${JSON.stringify(rows)}`);
+      logger.debug({rows}, `Query result for all chargers`);
       const chargers = rows.map(row => new Charger(
         row.identity,
         row.userId,
