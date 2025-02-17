@@ -1,23 +1,32 @@
 import express from 'express';
 import pinoHttp from 'pino-http';
-import {RPCServer, createRPCError} from 'ocpp-rpc';
-import logger from './logger';
-import {initializeFirestoreRepositories, initializeSQLiteRepositories} from './db';
-import {createChargerRouter} from './controller/charger-router';
-import config from './config';
-import sendRequestToClient from './request';
+import {RPCServer, createRPCError, RPCClient} from 'ocpp-rpc';
+import {Socket} from 'node:net';
 import {Transaction} from './model/transaction';
+import {initializeSQLiteRepositories} from './db';
+import {createChargerRouter} from './controller/charger-router';
+import {createTransactionRouter} from './controller/transaction-router';
+import sendRequestToClient from './request';
+import config from './config';
+import logger from './logger';
 import axios from 'axios';
 import router from './routes';
 
+interface PendingChargingProfile {
+  current: number;
+  duration: number;
+  transactionId: number | null;
+}
+
 (async () => {
-  const {chargerRepository, connectedClients, pendingChargingProfiles} =
+  const {chargerRepository, transactionRepository, connectedClients, pendingChargingProfiles} =
     await initializeSQLiteRepositories();
 
   const app = express();
   app.use(pinoHttp({logger}));
   app.use(express.json());
   app.use(createChargerRouter(chargerRepository));
+  app.use(createTransactionRouter(transactionRepository));
   app.use(router);
 
   const ocppServer = new RPCServer({
@@ -25,17 +34,23 @@ import router from './routes';
     strictMode: true,
   });
 
-  const httpServer = app.listen(config.port, config.host, () => {
+  const httpServer = app.listen(config.port, '0.0.0.0', () => {
     logger.info(`HTTP server listening on http://${config.host}:${config.port}`);
   });
 
   httpServer.on('upgrade', (req, socket, head) => {
     logger.info(`HTTP upgrade request received from ${req.socket.remoteAddress}`);
-    ocppServer.handleUpgrade(req, socket, head);
+    ocppServer.handleUpgrade(req, socket as Socket, head);
   });
 
-  ocppServer.on('client', async (client) => {
+  ocppServer.on('client', async (client: RPCClient) => {
     const identity = client.identity;
+    if (!identity) {
+      logger.error('Client connected without identity. Closing client.');
+      await client.close();
+      return;
+    }
+
     logger.info(`Client connected with identity: ${identity}`);
 
     logger.debug(`Looking up charger for identity: ${identity}`);
@@ -44,29 +59,33 @@ import router from './routes';
 
     if (!charger) {
       logger.error(`No DB entry found for ${identity}. Closing client.`);
-      client.close();
+      await client.close();
       return;
     }
 
     connectedClients.set(identity, client);
     logger.info(`Charger connected: ${identity}`);
 
-    client.handle('BootNotification', async ({params}) => {
-      logger.info({params}, `BootNotification received from ${client.identity}`);
+    client.handle('BootNotification', async ({params}: any) => {
+      if (!params) {
+        logger.error(`Invalid BootNotification received from ${identity}. Missing params.`);
+        throw createRPCError('FormError', 'Missing params');
+      }
+      logger.info({params}, `BootNotification received from ${identity}`);
       try {
-        await updateChargerBootInfo(client.identity, params);
-        logger.debug(`Boot info update successful for ${client.identity}`);
+        await updateChargerBootInfo(identity, params);
+        logger.debug(`Boot info update successful for ${identity}`);
 
-        // If this is the first BootNotification, attempt to create the service.
+        // @ts-ignore
         if (charger.firstBootNotificationReceived == null || charger.firstBootNotificationReceived === 0) {
-          logger.info(`First BootNotification for ${client.identity} detected. Initiating service creation.`);
+          logger.info(`First BootNotification for ${identity} detected. Initiating service creation.`);
           try {
             const payload = {
               userId: charger.userId,
               dwellingId: charger.dwellingId,
               service: charger.serviceId,
               deviceData: {
-                identity: client.identity,
+                identity: identity,
                 vendor: params.chargePointVendor,
                 model: params.chargePointModel,
                 serialNumber: params.chargePointSerialNumber,
@@ -76,30 +95,29 @@ import router from './routes';
             logger.debug({payload}, `Sending service creation`);
             const response = await axios.post(
               `http://127.0.0.1:5001/zerofy-energy-dev/europe-west1/connectOcppDevices`,
-              //`https://europe-west1-${charger.projectId}.cloudfunctions.net/connectOcppDevices`,
               payload
             );
             const responseData = response.data;
             logger.debug({responseData}, `[BootNotification] Service creation response for userId ${charger.userId}`);
             if (response.status === 200) {
-              await chargerRepository.updateCharger(client.identity, {firstBootNotificationReceived: true});
-              logger.info(`firstBootNotificationReceived flag updated for ${client.identity}`);
+              await chargerRepository.updateCharger(identity, {firstBootNotificationReceived: true});
+              logger.info(`firstBootNotificationReceived flag updated for ${identity}`);
             } else {
-              logger.warn(`Unexpected response status ${response.status} for service creation on ${client.identity}`);
+              logger.warn(`Unexpected response status ${response.status} for service creation on ${identity}`);
             }
           } catch (err) {
-            logger.error(err, `Failed to create service for ${client.identity}`);
+            logger.error(err, `Failed to create service for ${identity}`);
           }
         }
       } catch (err) {
-        logger.error(err, `Failed to update charger boot info for ${client.identity}`);
+        logger.error(err, `Failed to update charger boot info for ${identity}`);
       }
       const responsePayload = {
         status: 'Accepted',
         interval: 300,
         currentTime: new Date().toISOString(),
       };
-      logger.debug(`BootNotification response for ${client.identity}: ${JSON.stringify(responsePayload)}`);
+      logger.debug(`BootNotification response for ${identity}: ${JSON.stringify(responsePayload)}`);
       return responsePayload;
     });
 
@@ -107,7 +125,7 @@ import router from './routes';
       logger.info({params}, `Heartbeat received from ${client.identity}`);
       const heartbeatTimestamp = new Date().toISOString();
       try {
-        await updateChargerHeartbeat(client.identity, heartbeatTimestamp);
+        await updateChargerHeartbeat(identity, heartbeatTimestamp);
         logger.debug(`Heartbeat update complete for ${client.identity}`);
       } catch (err) {
         logger.error(err, `Failed to update charger heartbeat for ${client.identity}`);
@@ -119,18 +137,18 @@ import router from './routes';
       return responsePayload;
     });
 
-    client.handle('StatusNotification', async ({params}) => {
+    client.handle('StatusNotification', async ({params}: any) => {
       logger.info({params}, `StatusNotification received from ${client.identity}`);
       try {
-        await updateChargerStatus(client.identity, params);
+        await updateChargerStatus(identity, params);
         logger.debug(`Status update complete for ${client.identity}`);
       } catch (err) {
         logger.error(err, `Failed to update charger status for ${client.identity}`);
       }
 
       if (params.status === 'Charging') {
-        logger.info(`Charging status detected for ${client.identity}`);
-        const pendingProfile = pendingChargingProfiles.get(client.identity);
+        logger.info(`Charging status detected for ${identity}`);
+        const pendingProfile: PendingChargingProfile | undefined = pendingChargingProfiles.get(identity);
         if (pendingProfile?.transactionId) {
           logger.info({pendingProfile}, `Found pending charging profile for ${client.identity}`);
           const {current, duration, transactionId} = pendingProfile;
@@ -161,7 +179,7 @@ import router from './routes';
           } catch (error) {
             logger.error(error, `Failed to apply charging profile for ${client.identity}`);
           }
-          pendingChargingProfiles.delete(client.identity);
+          pendingChargingProfiles.delete(identity);
           logger.info(`Pending charging profile removed for ${client.identity}`);
         } else {
           logger.debug(`No pending charging profile for ${client.identity}`);
@@ -170,7 +188,7 @@ import router from './routes';
       return {};
     });
 
-    client.handle('Authorize', ({params}) => {
+    client.handle('Authorize', async ({params}: any) => {
       logger.info({params}, `Authorize received from ${client.identity}`);
       return {
         idTagInfo: {
@@ -179,31 +197,44 @@ import router from './routes';
       };
     });
 
-    client.handle('StartTransaction', async ({params}) => {
-      logger.info({params}, `StartTransaction received from ${client.identity}`);
-      const transaction = new Transaction(params.transactionId, client.identity, params.idTag, params.meterStart);
+    client.handle('StartTransaction', async ({params}: any) => {
+      logger.info({params}, `StartTransaction received from ${identity}`);
+      const transaction: Transaction = {
+        transactionId: null,
+        identity: identity,
+        idTag: params.idTag,
+        meterStart: params.meterStart,
+        meterEnd: null,
+        status: 'active',
+        startTimestamp: new Date().toISOString(),
+        stopTimestamp: null,
+      };
+
       try {
-        await transactionRepository.addTransaction(transaction);
-        logger.info(`Transaction started for ${client.identity}: ${transaction.transactionId}`);
+        const addedTransaction = await transactionRepository.addTransaction(transaction);
+        logger.info(`Transaction started for ${identity}: ${transaction.transactionId}`);
+        const pendingProfile: PendingChargingProfile | undefined = pendingChargingProfiles.get(identity);
+        if (pendingProfile) {
+          pendingChargingProfiles.set(identity, {
+            ...pendingProfile,
+            transactionId: addedTransaction.transactionId,
+          });
+          logger.debug(`Updated pending charging profile with transactionId for ${client.identity}`);
+        }
+        return {
+          transactionId: transaction.transactionId,
+          idTagInfo: {status: 'Accepted'},
+        };
       } catch (err) {
         logger.error(err, `Failed to add transaction for ${client.identity}`);
-        throw err;
+        return {
+          transactionId: null,
+          idTagInfo: {status: 'Rejected'},
+        };
       }
-      const pendingProfile = pendingChargingProfiles.get(client.identity);
-      if (pendingProfile) {
-        pendingChargingProfiles.set(client.identity, {
-          ...pendingProfile,
-          transactionId: transaction.transactionId,
-        });
-        logger.debug(`Updated pending charging profile with transactionId for ${client.identity}`);
-      }
-      return {
-        transactionId: transaction.transactionId,
-        idTagInfo: {status: 'Accepted'},
-      };
     });
 
-    client.handle('StopTransaction', async ({params}) => {
+    client.handle('StopTransaction', async ({params}: any) => {
       logger.info({params}, `StopTransaction received from ${client.identity}`);
       try {
         await transactionRepository.updateTransaction(params.transactionId, {
@@ -211,6 +242,9 @@ import router from './routes';
           status: 'completed',
         });
         logger.info(`Transaction stopped for ${client.identity}: ${params.transactionId}`);
+        await chargerRepository.updateCharger(identity, {
+          power: 0,
+        });
       } catch (err) {
         logger.error(err, `Failed to update transaction for ${client.identity}`);
         throw err;
@@ -220,7 +254,7 @@ import router from './routes';
       };
     });
 
-    client.handle('DataTransfer', ({params}) => {
+    client.handle('DataTransfer', async ({params}: any) => {
       logger.info({params}, `DataTransfer received from ${client.identity}`);
       logger.debug(`DataTransfer vendorId for ${client.identity}: ${params.vendorId}`);
       return {
@@ -228,35 +262,77 @@ import router from './routes';
       };
     });
 
-    client.handle('MeterValues', ({params}) => {
-      logger.info({params}, `MeterValues received from ${client.identity}`);
-      // Optionally add more logging here if meter values need further processing.
+    interface SampledValue {
+      value: string;
+      context: string;
+      format: string;
+      measurand: string;
+      location?: string;
+      unit: string;
+      phase?: string;
+    }
+
+    interface MeterValue {
+      timestamp: string;
+      sampledValue: SampledValue[];
+    }
+
+    interface MeterValuesParams {
+      connectorId: number;
+      transactionId: number;
+      meterValue: MeterValue[];
+    }
+
+    client.handle('MeterValues', async ({ params }: any) => {
+      logger.info({ params }, `MeterValues received from ${identity}`);
+      const param = params as MeterValuesParams;
+      const totalPowerMeterValue = param.meterValue.find((meterValue: MeterValue) => {
+        return meterValue.sampledValue.some((sampledValue: SampledValue) => {
+          return sampledValue.measurand === 'Power.Active.Import' && !sampledValue.phase;
+        });
+      });
+
+      if (totalPowerMeterValue) {
+        const totalPowerSampledValue = totalPowerMeterValue.sampledValue.find(
+          (sampledValue: SampledValue) => sampledValue.measurand === 'Power.Active.Import' && !sampledValue.phase
+        );
+        if (totalPowerSampledValue) {
+          const totalPowerInKillowatts = parseFloat(totalPowerSampledValue.value) / 1000;
+          await chargerRepository.updateCharger(identity, {
+            power: totalPowerInKillowatts,
+          });
+        } else {
+          logger.warn('Total power sampled value not found in MeterValues');
+        }
+      } else {
+        logger.warn('Total power meter value not found in MeterValues');
+      }
+
       return {};
     });
 
-    client.handle('DiagnosticsStatusNotification', ({params}) => {
+    client.handle('DiagnosticsStatusNotification', async ({params}) => {
       logger.info({params}, `DiagnosticsStatusNotification received from ${client.identity}`);
       return {};
     });
 
-    client.handle('FirmwareStatusNotification', ({params}) => {
+    client.handle('FirmwareStatusNotification', async ({params}) => {
       logger.info({params}, `FirmwareStatusNotification received from ${client.identity}`);
       return {};
     });
 
-    // Fallback for unrecognized methods
     client.handle(({method, params}) => {
       logger.warn({method, params}, `Unrecognized method received from ${client.identity}`);
       throw createRPCError('NotImplemented');
     });
 
     client.on('close', () => {
-      connectedClients.delete(client.identity);
+      connectedClients.delete(identity);
       logger.info(`Charger disconnected: ${client.identity}`);
     });
   });
 
-  async function updateChargerBootInfo(identity, params) {
+  async function updateChargerBootInfo(identity: string, params: any) {
     logger.debug({params}, `Updating boot info for ${identity} with params`);
     await chargerRepository.updateCharger(identity, {
       vendor: params.chargePointVendor,
@@ -267,7 +343,7 @@ import router from './routes';
     logger.info(`Charger boot info updated for ${identity}`);
   }
 
-  async function updateChargerStatus(identity, params) {
+  async function updateChargerStatus(identity: string, params: any) {
     logger.debug({params}, `Updating status for ${identity} with params`);
     await chargerRepository.updateCharger(identity, {
       lastStatus: params.status,
@@ -277,7 +353,7 @@ import router from './routes';
     logger.info(`Charger status updated for ${identity}`);
   }
 
-  async function updateChargerHeartbeat(identity, heartbeatTimestamp) {
+  async function updateChargerHeartbeat(identity: string, heartbeatTimestamp: string) {
     logger.debug({heartbeatTimestamp}, `Updating heartbeat for ${identity}`);
     await chargerRepository.updateCharger(identity, {
       lastHeartbeat: heartbeatTimestamp,

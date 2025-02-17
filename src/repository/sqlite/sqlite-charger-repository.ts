@@ -33,7 +33,8 @@ export class SqliteChargerRepository implements ChargerRepository {
         row.lastStatus,
         row.lastStatusTimestamp,
         row.errorCode,
-        row.lastHeartbeat
+        row.lastHeartbeat,
+        row.power
       );
       logger.info(`Charger retrieved for identity: ${identity}`);
       return charger;
@@ -104,6 +105,11 @@ export class SqliteChargerRepository implements ChargerRepository {
         values.push(updates.lastHeartbeat);
       }
 
+      if (updates.power !== undefined) {
+        columns.push('power = ?');
+        values.push(updates.power);
+      }
+
       if (columns.length === 0) {
         logger.info(`No updates provided for identity: ${identity}`);
         return;
@@ -145,7 +151,8 @@ export class SqliteChargerRepository implements ChargerRepository {
             row.lastStatus,
             row.lastStatusTimestamp,
             row.errorCode,
-            row.lastHeartbeat
+            row.lastHeartbeat,
+            row.power
           )
       );
       logger.info(`Retrieved ${chargers.length} charger(s).`);

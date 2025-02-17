@@ -16,7 +16,7 @@ exports.setup = function (options, seedLink) {
 
 exports.up = function (db) {
   return db.createTable('transactions', {
-    transactionId: {type: 'string', primaryKey: true},
+    transactionId: {type: 'int', primaryKey: true, autoIncrement: true},
     identity: {type: 'string'},
     idTag: {type: 'string'},
     meterStart: {type: 'int'},

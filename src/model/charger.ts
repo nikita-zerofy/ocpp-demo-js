@@ -13,6 +13,7 @@ export class Charger {
     public lastStatus?: string,
     public lastStatusTimestamp?: string,
     public errorCode?: string,
-    public lastHeartbeat?: string
+    public lastHeartbeat?: string,
+    public power?: number,
   ) {}
 }

@@ -57,7 +57,7 @@ export class ChargerController {
         return res.status(404).json({error: 'Charger not found'});
       }
       logger.info(`ChargerController: Charger retrieved`, {charger});
-      return res.json({charger});
+      return res.json(charger);
     } catch (error: any) {
       logger.error(error, `ChargerController: Failed to retrieve charger for identity ${identity}`);
       return res.status(500).json({error: error.message});
@@ -100,90 +100,90 @@ export class ChargerController {
   }
 
   async startCharging(req: Request, res: Response): Promise<Response> {
-    const {clientId} = req.params;
-    logger.info(`ChargerController: Received startCharging request for client ${clientId}`, {requestBody: req.body});
+    const {identity} = req.params;
+    logger.info(`ChargerController: Received startCharging request for client ${identity}`, {requestBody: req.body});
     const {current, duration} = req.body;
     if (!current || !duration) {
-      logger.warn(`ChargerController: Missing current or duration in request for client ${clientId}`);
+      logger.warn(`ChargerController: Missing current or duration in request for client ${identity}`);
       return res.status(400).json({error: 'current/duration is required'});
     }
     try {
-      logger.debug(`ChargerController: Sending RemoteStartTransaction request for client ${clientId}`);
-      const response = await sendRequestToClient(clientId, 'RemoteStartTransaction', {
+      logger.debug(`ChargerController: Sending RemoteStartTransaction request for client ${identity}`);
+      const response = await sendRequestToClient(identity, 'RemoteStartTransaction', {
         idTag: 'myIdTag123',
         connectorId: 1,
       });
-      pendingChargingProfiles.set(clientId!, {
+      pendingChargingProfiles.set(identity!, {
         current,
         duration,
         transactionId: null, // To be updated later
       });
-      logger.info(`ChargerController: Charging started for client ${clientId}`, {profile: {current, duration}});
+      logger.info(`ChargerController: Charging started for client ${identity}`, {profile: {current, duration}});
       return res.json({
         message: 'Charging started. Profile will be applied once active.',
         details: response,
       });
     } catch (error: any) {
-      logger.error(error, `ChargerController: Error starting charging for client ${clientId}`);
+      logger.error(error, `ChargerController: Error starting charging for client ${identity}`);
       return res.status(500).json({error: error.message});
     }
   }
 
   async stopCharging(req: Request, res: Response): Promise<Response> {
-    const {clientId} = req.params;
-    logger.info(`ChargerController: Received stopCharging request for client ${clientId}`, {requestBody: req.body});
+    const {identity} = req.params;
+    logger.info({requestBody: req.body}, `ChargerController: Received stopCharging request for client ${identity}`);
     const {transactionId} = req.body;
     if (!transactionId) {
-      logger.warn(`ChargerController: Missing transactionId for client ${clientId}`);
+      logger.warn(`ChargerController: Missing transactionId for client ${transactionId}`);
       return res.status(400).json({error: 'transactionId is required'});
     }
     try {
       const payload = {transactionId};
       logger.debug(
-        `ChargerController: Sending RemoteStopTransaction request for client ${clientId} with payload`,
+        `ChargerController: Sending RemoteStopTransaction request for client ${identity} with payload`,
         payload
       );
-      const response = await sendRequestToClient(clientId, 'RemoteStopTransaction', payload);
+      const response = await sendRequestToClient(identity, 'RemoteStopTransaction', payload);
       logger.info(
-        `ChargerController: Charging stopped successfully for client ${clientId} (transaction: ${transactionId})`
+        `ChargerController: Charging stopped successfully for client ${identity} (transaction: ${transactionId})`
       );
       return res.json({
         message: 'Charging stopped successfully',
         response,
       });
     } catch (error: any) {
-      logger.error(error, `ChargerController: Error stopping charging for client ${clientId}`);
+      logger.error(error, `ChargerController: Error stopping charging for client ${identity}`);
       return res.status(500).json({error: error.message});
     }
   }
 
   async chargeDefault(req: Request, res: Response): Promise<Response> {
-    const {clientId} = req.params;
-    logger.info(`ChargerController: Received chargeDefault request for client ${clientId}`);
+    const {identity} = req.params;
+    logger.info(`ChargerController: Received chargeDefault request for client ${identity}`);
     try {
       const defaultPayload = {idTag: 'defaultIdTag', connectorId: 1};
       logger.debug(
-        `ChargerController: Sending RemoteStartTransaction with default payload for client ${clientId}`,
+        `ChargerController: Sending RemoteStartTransaction with default payload for client ${identity}`,
         defaultPayload
       );
-      const response = await sendRequestToClient(clientId, 'RemoteStartTransaction', defaultPayload);
-      logger.info(`ChargerController: Charging started with default settings for client ${clientId}`);
+      const response = await sendRequestToClient(identity, 'RemoteStartTransaction', defaultPayload);
+      logger.info(`ChargerController: Charging started with default settings for client ${identity}`);
       return res.json({
         message: 'Charging started with default settings.',
         details: response,
       });
     } catch (error: any) {
-      logger.error(error, `ChargerController: Error starting charging with default settings for client ${clientId}`);
+      logger.error(error, `ChargerController: Error starting charging with default settings for client ${identity}`);
       return res.status(500).json({error: error.message});
     }
   }
 
   async triggerMessage(req: Request, res: Response): Promise<Response> {
-    const {clientId} = req.params;
-    logger.info(`ChargerController: Received triggerMessage request for client ${clientId}`, {requestBody: req.body});
+    const {identity} = req.params;
+    logger.info(`ChargerController: Received triggerMessage request for client ${identity}`, {requestBody: req.body});
     const {requestedMessage, connectorId} = req.body;
     if (!requestedMessage) {
-      logger.warn(`ChargerController: Missing requestedMessage for client ${clientId}`);
+      logger.warn(`ChargerController: Missing requestedMessage for client ${identity}`);
       return res.status(400).json({error: 'requestedMessage is required'});
     }
     try {
@@ -191,29 +191,29 @@ export class ChargerController {
         requestedMessage,
         connectorId: connectorId || 1,
       };
-      logger.debug(`ChargerController: Sending TriggerMessage for client ${clientId} with payload`, payload);
-      const response = await sendRequestToClient(clientId, 'TriggerMessage', payload);
-      logger.info(`ChargerController: TriggerMessage request sent successfully for client ${clientId}`);
+      logger.debug(`ChargerController: Sending TriggerMessage for client ${identity} with payload`, payload);
+      const response = await sendRequestToClient(identity, 'TriggerMessage', payload);
+      logger.info(`ChargerController: TriggerMessage request sent successfully for client ${identity}`);
       return res.json({
         message: 'TriggerMessage request sent successfully',
         details: response,
       });
     } catch (error: any) {
-      logger.error(error, `ChargerController: Error triggering message for client ${clientId}`);
+      logger.error(error, `ChargerController: Error triggering message for client ${identity}`);
       return res.status(500).json({error: error.message});
     }
   }
 
   async changeCurrent(req: Request, res: Response): Promise<Response> {
-    const {clientId} = req.params;
-    logger.info(`ChargerController: Received changeCurrent request for client ${clientId}`, {requestBody: req.body});
+    const {identity} = req.params;
+    logger.info(`ChargerController: Received changeCurrent request for client ${identity}`, {requestBody: req.body});
     const {transactionId, desiredCurrent} = req.body;
     if (!transactionId) {
-      logger.warn(`ChargerController: Missing transactionId for client ${clientId}`);
+      logger.warn(`ChargerController: Missing transactionId for client ${identity}`);
       return res.status(400).json({error: 'transactionId is required'});
     }
     if (!desiredCurrent) {
-      logger.warn(`ChargerController: Missing desiredCurrent for client ${clientId}`);
+      logger.warn(`ChargerController: Missing desiredCurrent for client ${identity}`);
       return res.status(400).json({error: 'desiredCurrent is required'});
     }
 
@@ -234,33 +234,33 @@ export class ChargerController {
 
     try {
       logger.debug(
-        `ChargerController: Sending SetChargingProfile for client ${clientId} with payload`,
+        `ChargerController: Sending SetChargingProfile for client ${identity} with payload`,
         setChargingProfilePayload
       );
-      const response = await sendRequestToClient(clientId, 'SetChargingProfile', setChargingProfilePayload);
-      logger.info(`ChargerController: Charging current updated successfully for client ${clientId}`);
+      const response = await sendRequestToClient(identity, 'SetChargingProfile', setChargingProfilePayload);
+      logger.info(`ChargerController: Charging current updated successfully for client ${identity}`);
       return res.json({
         message: 'Charging current updated successfully',
         details: response,
       });
     } catch (error: any) {
-      logger.error(error, `ChargerController: Error updating charging current for client ${clientId}`);
+      logger.error(error, `ChargerController: Error updating charging current for client ${identity}`);
       return res.status(500).json({error: error.message});
     }
   }
 
   async getConfiguration(req: Request, res: Response): Promise<Response> {
-    const {clientId} = req.params;
-    logger.info(`ChargerController: Received getConfiguration request for client ${clientId}`);
+    const {identity} = req.params;
+    logger.info(`ChargerController: Received getConfiguration request for client ${identity}`);
     try {
-      const configResponse = await sendRequestToClient(clientId, 'GetConfiguration', {});
-      logger.info(`ChargerController: Configuration retrieved successfully for client ${clientId}`);
+      const configResponse = await sendRequestToClient(identity, 'GetConfiguration', {});
+      logger.info(`ChargerController: Configuration retrieved successfully for client ${identity}`);
       return res.json({
         message: 'Config retrieved successfully',
         configResponse,
       });
     } catch (error: any) {
-      logger.error(error, `ChargerController: Error retrieving configuration for client ${clientId}`);
+      logger.error(error, `ChargerController: Error retrieving configuration for client ${identity}`);
       return res.status(500).json({error: error.message});
     }
   }

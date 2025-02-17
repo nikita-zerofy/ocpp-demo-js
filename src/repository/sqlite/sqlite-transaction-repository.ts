@@ -19,16 +19,16 @@ export class SqliteTransactionRepository implements TransactionRepository {
         return null;
       }
 
-      const transaction = new Transaction(
-        row.transactionId,
-        row.identity,
-        row.idTag,
-        row.meterStart,
-        row.meterEnd,
-        row.status,
-        row.startTimestamp,
-        row.stopTimestamp
-      );
+      const transaction = {
+        transactionId: row.transactionId,
+        identity: row.identity,
+        idTag: row.idTag,
+        meterStart: row.meterStart,
+        meterEnd: row.meterEnd,
+        status: row.status,
+        startTimestamp: row.startTimestamp,
+        stopTimestamp: row.stopTimestamp,
+      };
       logger.info(`Transaction retrieved for transactionId: ${transactionId}`);
       return transaction;
     } catch (error) {
@@ -41,7 +41,7 @@ export class SqliteTransactionRepository implements TransactionRepository {
     logger.info(`Entering getTransactions with filters: ${JSON.stringify(filters)}`);
     try {
       const {identity, status} = filters;
-      let query = 'SELECT * FROM transactions WHERE 1=1';
+      let query = 'SELECT * FROM transactions';
       const params: any[] = [];
 
       if (identity) {
@@ -58,19 +58,18 @@ export class SqliteTransactionRepository implements TransactionRepository {
       const rows = await this.db.all(query, ...params);
       logger.info(`Query result: ${JSON.stringify(rows)}`);
 
-      const transactions = rows.map(
-        (row) =>
-          new Transaction(
-            row.transactionId,
-            row.identity,
-            row.idTag,
-            row.meterStart,
-            row.meterEnd,
-            row.status,
-            row.startTimestamp,
-            row.stopTimestamp
-          )
-      );
+      const transactions = rows.map((row) => {
+        return {
+          transactionId: row.transactionId,
+          identity: row.identity,
+          idTag: row.idTag,
+          meterStart: row.meterStart,
+          meterEnd: row.meterEnd,
+          status: row.status,
+          startTimestamp: row.startTimestamp,
+          stopTimestamp: row.stopTimestamp,
+        };
+      });
       logger.info(`Retrieved ${transactions.length} transaction(s).`);
       return transactions;
     } catch (error) {
@@ -79,17 +78,24 @@ export class SqliteTransactionRepository implements TransactionRepository {
     }
   }
 
-  async addTransaction(transaction: Transaction): Promise<void> {
+  async addTransaction(transaction: Transaction): Promise<Transaction> {
     logger.info(`Entering addTransaction for transactionId: ${transaction.transactionId}`);
     try {
-      await this.db.run(
-        'INSERT INTO transactions (transactionId, identity, idTag, meterStart) VALUES (?, ?, ?, ?)',
-        transaction.transactionId,
+      const result = await this.db.run(
+        'INSERT INTO transactions (identity, idTag, meterStart, startTimestamp, status) VALUES (?,?,?,?,?)',
         transaction.identity,
         transaction.idTag,
-        transaction.meterStart
+        transaction.meterStart,
+        transaction.startTimestamp,
+        transaction.status
       );
-      logger.info(`Transaction added with transactionId: ${transaction.transactionId}`);
+      const transactionId = result.lastID;
+      if (!transactionId) {
+        throw new Error('Failed to retrieve transactionId');
+      }
+      transaction.transactionId = transactionId;
+      logger.info(`Transaction added with transactionId: ${transactionId}`);
+      return transaction;
     } catch (error) {
       logger.error(`Error in addTransaction for transactionId: ${transaction.transactionId}`, error);
       throw error;

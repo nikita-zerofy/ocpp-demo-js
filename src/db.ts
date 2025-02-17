@@ -4,6 +4,7 @@ import {SqliteChargerRepository} from './repository/sqlite/sqlite-charger-reposi
 import admin from 'firebase-admin';
 import {getFirestore} from 'firebase-admin/firestore';
 import {FireormChargerRepository} from './repository/firestore/firestore-charger-repository';
+import {SqliteTransactionRepository} from './repository/sqlite/sqlite-transaction-repository';
 
 const app = admin.initializeApp({
   credential: admin.credential.applicationDefault(),
@@ -27,8 +28,8 @@ export const pendingChargingProfiles: Map<string, any> = new Map();
 export async function initializeSQLiteRepositories() {
   const db = await dbPromise;
   const chargerRepository = new SqliteChargerRepository(db);
-  //const transactionRepository = new SqliteTransactionRepository(db);
-  return {chargerRepository, connectedClients, pendingChargingProfiles};
+  const transactionRepository = new SqliteTransactionRepository(db);
+  return {chargerRepository, transactionRepository, connectedClients, pendingChargingProfiles};
 }
 
 /**

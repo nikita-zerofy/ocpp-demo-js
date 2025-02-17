@@ -1,7 +1,7 @@
 {
   "name": "ocpp-ts",
   "version": "1.0.0",
-  "main": "src/index.js",
+  "main": "src/index.ts",
   "scripts": {
     "migrate": "node run-migrations.cjs up --config database.json",
     "migrate:down": "node run-migrations.cjs down --config database.json",

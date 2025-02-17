@@ -12,6 +12,6 @@ export interface ChargerRepository {
 export interface TransactionRepository {
   getTransaction(transactionId: string): Promise<Transaction | null>;
   getTransactions(filters: {identity?: string; status?: string}): Promise<Transaction[]>;
-  addTransaction(transaction: Transaction): Promise<void>;
+  addTransaction(transaction: Transaction): Promise<Transaction>;
   updateTransaction(transactionId: string, updates: Partial<Transaction>): Promise<void>;
 }

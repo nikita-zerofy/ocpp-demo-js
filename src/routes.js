@@ -4,22 +4,6 @@ import {connectedClients} from './db';
 
 const routes = express.Router();
 
-// /** GET /transactions
-//  *  Retrieve transactions with optional filtering by identity and status.
-//  */
-// routes.get('/transactions', async (req, res) => {
-//   logger.info('[/transactions] Received request for transactions.', {query: req.query});
-//   try {
-//     const {identity, status} = req.query;
-//     const transactions = await transactionRepository.getTransactions({identity: identity, status});
-//     logger.info(`[/transactions] Retrieved ${transactions.length} transaction(s).`);
-//     res.json({transactions});
-//   } catch (error) {
-//     logger.error(error, '[/transactions] Failed to retrieve transactions.');
-//     res.status(500).json({error: error.message});
-//   }
-// });
-
 /** GET /connected
  *  List the currently connected charger identities.
  */

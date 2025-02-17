@@ -29,27 +29,27 @@ export function createChargerRouter(chargerRepository: ChargerRepository) {
   });
 
   // Charging control endpoints:
-  router.post('/charge/:clientId', async (req: Request, res: Response) => {
+  router.post('/charge/:identity', async (req: Request, res: Response) => {
     await chargerController.startCharging(req, res);
   });
 
-  router.post('/stopCharging/:clientId', async (req: Request, res: Response) => {
+  router.post('/stopCharging/:identity', async (req: Request, res: Response) => {
     await chargerController.stopCharging(req, res);
   });
 
-  router.post('/chargeDefault/:clientId', async (req: Request, res: Response) => {
+  router.post('/chargeDefault/:identity', async (req: Request, res: Response) => {
     await chargerController.chargeDefault(req, res);
   });
 
-  router.post('/triggerMessage/:clientId', async (req: Request, res: Response) => {
+  router.post('/triggerMessage/:identity', async (req: Request, res: Response) => {
     await chargerController.triggerMessage(req, res);
   });
 
-  router.post('/changeCurrent/:clientId', async (req: Request, res: Response) => {
+  router.post('/changeCurrent/:identity', async (req: Request, res: Response) => {
     await chargerController.changeCurrent(req, res);
   });
 
-  router.get('/config/:clientId', async (req: Request, res: Response) => {
+  router.get('/config/:identity', async (req: Request, res: Response) => {
     await chargerController.getConfiguration(req, res);
   });
 
