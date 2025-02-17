@@ -155,4 +155,15 @@ export class SqliteChargerRepository implements ChargerRepository {
       throw error;
     }
   }
+
+  async deleteCharger(identity: string): Promise<void> {
+    logger.info(`Entering deleteCharger for identity: ${identity}`);
+    try {
+      await this.db.run('DELETE FROM chargers WHERE identity = ?', identity);
+      logger.info(`Charger deleted for identity: ${identity}`);
+    } catch (error) {
+      logger.error(`Error in deleteCharger for identity: ${identity}`, error);
+      throw error;
+    }
+  }
 }

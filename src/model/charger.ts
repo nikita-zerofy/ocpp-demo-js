@@ -1,6 +1,6 @@
 export class Charger {
   constructor(
-    public identity: string,
+    public id: string,
     public userId: string,
     public dwellingId: string,
     public serviceId: string,

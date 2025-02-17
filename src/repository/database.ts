@@ -3,9 +3,10 @@ import {Transaction} from '../model/transaction';
 
 export interface ChargerRepository {
   getCharger(identity: string): Promise<Charger | null>;
-  addCharger(charger: any): Promise<void>;
+  addCharger(charger: Charger): Promise<void>;
   updateCharger(identity: string, updates: Charger): Promise<void>;
   getAllChargers(): Promise<Charger[]>;
+  deleteCharger(identity: string): Promise<void>;
 }
 
 export interface TransactionRepository {
