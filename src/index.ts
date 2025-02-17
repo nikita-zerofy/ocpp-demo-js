@@ -93,8 +93,9 @@ interface PendingChargingProfile {
               },
             };
             logger.debug({payload}, `Sending service creation`);
+            const url = (): string => config.nodeEnv === 'production' ? `https://europe-west1-${charger.projectId}.cloudfunctions.net/connectOcppDevices` : `http://127.0.0.1:5001/zerofy-energy-dev/europe-west1/connectOcppDevices`;
             const response = await axios.post(
-              `http://127.0.0.1:5001/zerofy-energy-dev/europe-west1/connectOcppDevices`,
+              url(),
               payload
             );
             const responseData = response.data;
