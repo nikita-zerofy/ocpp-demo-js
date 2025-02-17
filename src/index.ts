@@ -54,8 +54,7 @@ interface PendingChargingProfile {
     }
 
     const attempts = connectionAttempts.get(identity) || 0;
-    if (attempts > 5) {
-      logger.error(`Too many connection attempts from ${identity}. Blocking client.`);
+    if (attempts > 3) {
       await client.close();
       return;
     }
