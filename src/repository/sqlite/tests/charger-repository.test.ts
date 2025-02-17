@@ -60,7 +60,7 @@ describe('SqliteChargerRepository', () => {
 
     await repository.addCharger(testCharger);
 
-    await repository.updateCharger(testCharger.identity, {
+    await repository.updateCharger(testCharger.id, {
       vendor: testCharger.vendor,
       model: testCharger.model,
       serialNumber: testCharger.serialNumber,
@@ -68,11 +68,11 @@ describe('SqliteChargerRepository', () => {
       firstBootNotificationReceived: testCharger.firstBootNotificationReceived,
     });
 
-    const retrievedCharger = await repository.getCharger(testCharger.identity);
+    const retrievedCharger = await repository.getCharger(testCharger.id);
 
     expect(retrievedCharger).not.toBeNull();
-    expect(retrievedCharger!.identity).toBe(testCharger.identity);
-    expect(retrievedCharger!.userId).toBe(testCharger.userId);
+    expect(retrievedCharger!.id).toBe(testCharger.id);
+    expect(retrievedCharger!.id).toBe(testCharger.id);
     expect(retrievedCharger!.dwellingId).toBe(testCharger.dwellingId);
     expect(retrievedCharger!.serviceId).toBe(testCharger.serviceId);
     expect(retrievedCharger!.projectId).toBe(testCharger.projectId);

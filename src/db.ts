@@ -1,7 +1,6 @@
 import sqlite3 from 'sqlite3';
 import {open, Database} from 'sqlite';
 import {SqliteChargerRepository} from './repository/sqlite/sqlite-charger-repository';
-import {SqliteTransactionRepository} from './repository/sqlite/sqlite-transaction-repository';
 import admin from 'firebase-admin';
 import {getFirestore} from 'firebase-admin/firestore';
 import {FireormChargerRepository} from './repository/firestore/firestore-charger-repository';
@@ -25,11 +24,11 @@ export const pendingChargingProfiles: Map<string, any> = new Map();
 /**
  * Initializes and returns SQLite-based repositories.
  */
-export async function initializeRepositories() {
+export async function initializeSQLiteRepositories() {
   const db = await dbPromise;
   const chargerRepository = new SqliteChargerRepository(db);
-  const transactionRepository = new SqliteTransactionRepository(db);
-  return {chargerRepository, transactionRepository, db};
+  //const transactionRepository = new SqliteTransactionRepository(db);
+  return {chargerRepository, connectedClients, pendingChargingProfiles};
 }
 
 /**
@@ -38,7 +37,7 @@ export async function initializeRepositories() {
  */
 export async function initializeFirestoreRepositories() {
   const {initialize, getRepository} = await import('fireorm');
-  const {Charger} = await import('./repository/firestore/firestore-charger'); // Must be decorated with @Collection()
+  const {Charger} = await import('./repository/firestore/firestore-charger');
 
   initialize(firestore);
 

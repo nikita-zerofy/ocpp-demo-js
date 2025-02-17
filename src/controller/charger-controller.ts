@@ -23,8 +23,8 @@ export class ChargerController {
       const charger = new Charger(randomUUID().toUpperCase(), userId, dwellingId, serviceId, projectId);
       logger.debug('ChargerController: New charger created', {charger});
       await this.chargerRepository.addCharger(charger);
-      logger.info('ChargerController: Charger added to repository', {identity: charger.identity});
-      return res.json({ocppUrl: `ws://${config.host}:${config.port}`, identity: charger.identity});
+      logger.info('ChargerController: Charger added to repository', {identity: charger.id});
+      return res.json({ocppUrl: `ws://${config.host}:${config.port}`, identity: charger.id});
     } catch (err: any) {
       logger.error(err, 'ChargerController: Failed to create charger');
       return res.status(400).json({error: err.message});

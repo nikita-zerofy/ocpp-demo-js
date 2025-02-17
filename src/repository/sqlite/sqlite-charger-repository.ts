@@ -44,19 +44,19 @@ export class SqliteChargerRepository implements ChargerRepository {
   }
 
   async addCharger(charger: Charger): Promise<void> {
-    logger.info(`Entering addCharger for identity: ${charger.identity}`);
+    logger.info(`Entering addCharger for identity: ${charger.id}`);
     try {
       await this.db.run(
         'INSERT INTO chargers (identity, userId, dwellingId, serviceId, projectId) VALUES (?, ?, ?, ?, ?)',
-        charger.identity,
+        charger.id,
         charger.userId,
         charger.dwellingId,
         charger.serviceId,
         charger.projectId
       );
-      logger.info(`Charger added with identity: ${charger.identity}`);
+      logger.info(`Charger added with identity: ${charger.id}`);
     } catch (error) {
-      logger.error(`Error in addCharger for identity: ${charger.identity}`, error);
+      logger.error(`Error in addCharger for identity: ${charger.id}`, error);
       throw error;
     }
   }

@@ -2,7 +2,7 @@ import express from 'express';
 import pinoHttp from 'pino-http';
 import {RPCServer, createRPCError} from 'ocpp-rpc';
 import logger from './logger';
-import {initializeFirestoreRepositories, initializeRepositories} from './db';
+import {initializeFirestoreRepositories, initializeSQLiteRepositories} from './db';
 import {createChargerRouter} from './controller/charger-router';
 import config from './config';
 import sendRequestToClient from './request';
@@ -12,7 +12,7 @@ import router from './routes';
 
 (async () => {
   const {chargerRepository, connectedClients, pendingChargingProfiles} =
-    await initializeFirestoreRepositories();
+    await initializeSQLiteRepositories();
 
   const app = express();
   app.use(pinoHttp({logger}));
@@ -75,7 +75,8 @@ import router from './routes';
             };
             logger.debug({payload}, `Sending service creation`);
             const response = await axios.post(
-              `https://europe-west1-${charger.projectId}.cloudfunctions.net/connectOcppDevices`,
+              `http://127.0.0.1:5001/zerofy-energy-dev/europe-west1/connectOcppDevices`,
+              //`https://europe-west1-${charger.projectId}.cloudfunctions.net/connectOcppDevices`,
               payload
             );
             const responseData = response.data;
