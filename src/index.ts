@@ -38,6 +38,8 @@ interface PendingChargingProfile {
     logger.info(`HTTP server listening on http://${config.host}:${config.port}`);
   });
 
+  const connectionAttempts = new Map<string, number>();
+
   httpServer.on('upgrade', (req, socket, head) => {
     logger.info(`HTTP upgrade request received from ${req.socket.remoteAddress}`);
     ocppServer.handleUpgrade(req, socket as Socket, head);
@@ -50,6 +52,14 @@ interface PendingChargingProfile {
       await client.close();
       return;
     }
+
+    const attempts = connectionAttempts.get(identity) || 0;
+    if (attempts > 5) {
+      logger.error(`Too many connection attempts from ${identity}. Blocking client.`);
+      await client.close();
+      return;
+    }
+    connectionAttempts.set(identity, attempts + 1);
 
     logger.info(`Client connected with identity: ${identity}`);
 
