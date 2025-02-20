@@ -42,16 +42,21 @@ export class SqliteTransactionRepository implements TransactionRepository {
     try {
       const {identity, status} = filters;
       let query = 'SELECT * FROM transactions';
+      const conditions: string[] = [];
       const params: any[] = [];
 
       if (identity) {
-        query += ' AND identity = ?';
+        conditions.push('identity = ?');
         params.push(identity);
       }
 
       if (status) {
-        query += ' AND status = ?';
+        conditions.push('status = ?');
         params.push(status);
+      }
+
+      if (conditions.length > 0) {
+        query += ' WHERE ' + conditions.join(' AND ');
       }
 
       logger.info(`Executing query: ${query} with params: ${JSON.stringify(params)}`);
@@ -107,6 +112,11 @@ export class SqliteTransactionRepository implements TransactionRepository {
       `Entering updateTransaction for transactionId: ${transactionId} with updates: ${JSON.stringify(updates)}`
     );
     try {
+      const existing = await this.db.get('SELECT transactionId FROM transactions WHERE transactionId = ?', transactionId);
+      if (!existing) {
+        throw new Error(`Transaction with transactionId ${transactionId} not found`);
+      }
+
       const {meterEnd, status} = updates;
       await this.db.run(
         `

@@ -1,5 +1,5 @@
 import type {Request, Response} from 'express';
-import {ChargerRepository} from '../repository/database';
+import {ChargerRepository, TransactionRepository} from '../repository/database';
 import {Charger} from '../model/charger';
 import logger from '../logger';
 import {randomUUID} from 'node:crypto';
@@ -8,7 +8,10 @@ import sendRequestToClient from '../request';
 import {pendingChargingProfiles} from '../db';
 
 export class ChargerController {
-  constructor(private chargerRepository: ChargerRepository) {
+  constructor(
+    private chargerRepository: ChargerRepository,
+    private transactionRepository: TransactionRepository
+  ) {
     logger.info('ChargerController instantiated');
   }
 
@@ -51,6 +54,14 @@ export class ChargerController {
         logger.warn('ChargerController: Missing identity');
         return res.status(400).json({error: 'Missing identity'});
       }
+      await sendRequestToClient(identity, 'TriggerMessage', {
+        requestedMessage: 'Heartbeat',
+        connectorId: 1,
+      });
+      await sendRequestToClient(identity, 'TriggerMessage', {
+        requestedMessage: 'StatusNotification',
+        connectorId: 1,
+      });
       const charger = await this.chargerRepository.getCharger(identity);
       if (!charger) {
         logger.warn(`ChargerController: Charger not found for identity ${identity}`);
@@ -101,24 +112,29 @@ export class ChargerController {
 
   async startCharging(req: Request, res: Response): Promise<Response> {
     const {identity} = req.params;
+    if (!identity) {
+      logger.warn('ChargerController: Missing identity');
+      return res.status(400).json({error: 'Missing identity'});
+    }
     logger.info(`ChargerController: Received startCharging request for client ${identity}`, {requestBody: req.body});
-    const {current, duration} = req.body;
-    if (!current || !duration) {
+
+    const {current} = req.body;
+    if (!current) {
       logger.warn(`ChargerController: Missing current or duration in request for client ${identity}`);
       return res.status(400).json({error: 'current/duration is required'});
     }
+
     try {
       logger.debug(`ChargerController: Sending RemoteStartTransaction request for client ${identity}`);
       const response = await sendRequestToClient(identity, 'RemoteStartTransaction', {
         idTag: 'myIdTag123',
         connectorId: 1,
       });
-      pendingChargingProfiles.set(identity!, {
+      pendingChargingProfiles.set(identity, {
         current,
-        duration,
-        transactionId: null, // To be updated later
+        transactionId: null,
       });
-      logger.info(`ChargerController: Charging started for client ${identity}`, {profile: {current, duration}});
+      logger.info(`ChargerController: Charging started for client ${identity}, profile pending application.`);
       return res.json({
         message: 'Charging started. Profile will be applied once active.',
         details: response,
@@ -131,34 +147,56 @@ export class ChargerController {
 
   async stopCharging(req: Request, res: Response): Promise<Response> {
     const {identity} = req.params;
-    logger.info({requestBody: req.body}, `ChargerController: Received stopCharging request for client ${identity}`);
-    const {transactionId} = req.body;
-    if (!transactionId) {
-      logger.warn(`ChargerController: Missing transactionId for client ${transactionId}`);
-      return res.status(400).json({error: 'transactionId is required'});
+    if (!identity) {
+      logger.warn('ChargerController: Missing identity');
+      return res.status(400).json({error: 'Missing identity'});
     }
-    try {
-      const payload = {transactionId};
-      logger.debug(
-        `ChargerController: Sending RemoteStopTransaction request for client ${identity} with payload`,
-        payload
-      );
-      const response = await sendRequestToClient(identity, 'RemoteStopTransaction', payload);
-      logger.info(
-        `ChargerController: Charging stopped successfully for client ${identity} (transaction: ${transactionId})`
-      );
-      return res.json({
-        message: 'Charging stopped successfully',
-        response,
-      });
-    } catch (error: any) {
-      logger.error(error, `ChargerController: Error stopping charging for client ${identity}`);
-      return res.status(500).json({error: error.message});
+
+    logger.info(
+      {requestParams: req.params},
+      `ChargerController: Received stopAllCharging request for client ${identity}`
+    );
+
+    const transactions = await this.transactionRepository.getTransactions({identity, status: 'active'});
+    if (!transactions || transactions.length === 0) {
+      logger.warn(`ChargerController: No active transactions found for client ${identity}`);
+      return res.status(400).json({error: 'No active transaction found'});
     }
+
+    const responses = [];
+    for (const transaction of transactions) {
+      const payload = {transactionId: transaction.transactionId};
+      try {
+        logger.debug(
+          `ChargerController: Sending RemoteStopTransaction request for client ${identity} for transaction ${transaction.transactionId}`,
+          payload
+        );
+        const response = await sendRequestToClient(identity, 'RemoteStopTransaction', payload);
+        logger.info(
+          `ChargerController: Charging stopped successfully for client ${identity} (transaction: ${transaction.transactionId})`
+        );
+        responses.push({transactionId: transaction.transactionId, response});
+      } catch (error: any) {
+        logger.error(
+          error,
+          `ChargerController: Error stopping charging for client ${identity} for transaction ${transaction.transactionId}`
+        );
+        responses.push({transactionId: transaction.transactionId, error: error.message});
+      }
+    }
+
+    return res.json({
+      message: 'Stop transactions request processed',
+      responses,
+    });
   }
 
   async chargeDefault(req: Request, res: Response): Promise<Response> {
     const {identity} = req.params;
+    if (!identity) {
+      logger.warn('ChargerController: Missing identity');
+      return res.status(400).json({error: 'Missing identity'});
+    }
     logger.info(`ChargerController: Received chargeDefault request for client ${identity}`);
     try {
       const defaultPayload = {idTag: 'defaultIdTag', connectorId: 1};
@@ -206,17 +244,26 @@ export class ChargerController {
 
   async changeCurrent(req: Request, res: Response): Promise<Response> {
     const {identity} = req.params;
-    logger.info(`ChargerController: Received changeCurrent request for client ${identity}`, {requestBody: req.body});
-    const {transactionId, desiredCurrent} = req.body;
-    if (!transactionId) {
-      logger.warn(`ChargerController: Missing transactionId for client ${identity}`);
-      return res.status(400).json({error: 'transactionId is required'});
+    if (!identity) {
+      logger.warn('ChargerController: Missing identity');
+      return res.status(400).json({error: 'Missing identity'});
     }
+    logger.info(`ChargerController: Received changeCurrent request for client ${identity}`, {requestBody: req.body});
+    const transactions = await this.transactionRepository.getTransactions({identity, status: 'active'});
+    if (transactions.length > 1) {
+      logger.warn(`ChargerController: Multiple active transactions found for client ${identity}`);
+      return res.status(400).json({error: 'Multiple active transactions found, specify transactionId'});
+    }
+    if (transactions.length === 0 || !transactions[0] || transactions[0].transactionId == null) {
+      logger.warn(`ChargerController: No active transaction found for client ${identity}`);
+      return res.status(400).json({error: 'No active transaction found'});
+    }
+    const {desiredCurrent} = req.body;
     if (!desiredCurrent) {
       logger.warn(`ChargerController: Missing desiredCurrent for client ${identity}`);
       return res.status(400).json({error: 'desiredCurrent is required'});
     }
-
+    const targetTransactionId = req.body.transactionId || transactions[0].transactionId;
     const setChargingProfilePayload = {
       connectorId: 1,
       csChargingProfiles: {
@@ -224,7 +271,7 @@ export class ChargerController {
         stackLevel: 1,
         chargingProfilePurpose: 'TxProfile',
         chargingProfileKind: 'Absolute',
-        transactionId: transactionId,
+        transactionId: targetTransactionId,
         chargingSchedule: {
           chargingRateUnit: 'A',
           chargingSchedulePeriod: [{startPeriod: 0, limit: desiredCurrent}],

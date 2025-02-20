@@ -65,6 +65,11 @@ export class SqliteChargerRepository implements ChargerRepository {
   async updateCharger(identity: string, updates: Partial<Charger>): Promise<void> {
     logger.info(`Entering updateCharger for identity: ${identity} with updates: ${JSON.stringify(updates)}`);
     try {
+      const existing = await this.db.get('SELECT identity FROM chargers WHERE identity = ?', identity);
+      if (!existing) {
+        throw new Error(`Charger with identity ${identity} not found`);
+      }
+
       const columns: string[] = [];
       const values: any[] = [];
 
@@ -166,6 +171,10 @@ export class SqliteChargerRepository implements ChargerRepository {
   async deleteCharger(identity: string): Promise<void> {
     logger.info(`Entering deleteCharger for identity: ${identity}`);
     try {
+      const existing = await this.db.get('SELECT identity FROM chargers WHERE identity = ?', identity);
+      if (!existing) {
+        throw new Error(`Charger with identity ${identity} not found`);
+      }
       await this.db.run('DELETE FROM chargers WHERE identity = ?', identity);
       logger.info(`Charger deleted for identity: ${identity}`);
     } catch (error) {

@@ -12,12 +12,6 @@ import logger from './logger';
 import axios from 'axios';
 import router from './routes';
 
-interface PendingChargingProfile {
-  current: number;
-  duration: number;
-  transactionId: number | null;
-}
-
 (async () => {
   const {chargerRepository, transactionRepository, connectedClients, pendingChargingProfiles} =
     await initializeSQLiteRepositories();
@@ -25,7 +19,7 @@ interface PendingChargingProfile {
   const app = express();
   app.use(pinoHttp({logger}));
   app.use(express.json());
-  app.use(createChargerRouter(chargerRepository));
+  app.use(createChargerRouter(chargerRepository, transactionRepository));
   app.use(createTransactionRouter(transactionRepository));
   app.use(router);
 
@@ -102,11 +96,11 @@ interface PendingChargingProfile {
               },
             };
             logger.debug({payload}, `Sending service creation`);
-            const url = (): string => config.nodeEnv === 'production' ? `https://europe-west1-${charger.projectId}.cloudfunctions.net/connectOcppDevices` : `http://127.0.0.1:5001/zerofy-energy-dev/europe-west1/connectOcppDevices`;
-            const response = await axios.post(
-              url(),
-              payload
-            );
+            const url = (): string =>
+              config.nodeEnv === 'production'
+                ? `https://europe-west1-${charger.projectId}.cloudfunctions.net/connectOcppDevices`
+                : `http://127.0.0.1:5001/zerofy-energy-dev/europe-west1/connectOcppDevices`;
+            const response = await axios.post(url(), payload);
             const responseData = response.data;
             logger.debug({responseData}, `[BootNotification] Service creation response for userId ${charger.userId}`);
             if (response.status === 200) {
@@ -155,46 +149,6 @@ interface PendingChargingProfile {
       } catch (err) {
         logger.error(err, `Failed to update charger status for ${client.identity}`);
       }
-
-      if (params.status === 'Charging') {
-        logger.info(`Charging status detected for ${identity}`);
-        const pendingProfile: PendingChargingProfile | undefined = pendingChargingProfiles.get(identity);
-        if (pendingProfile?.transactionId) {
-          logger.info({pendingProfile}, `Found pending charging profile for ${client.identity}`);
-          const {current, duration, transactionId} = pendingProfile;
-          const setChargingProfilePayload = {
-            connectorId: 1,
-            csChargingProfiles: {
-              chargingProfileId: 12345,
-              stackLevel: 1,
-              chargingProfilePurpose: 'TxProfile',
-              chargingProfileKind: 'Absolute',
-              transactionId: transactionId,
-              chargingSchedule: {
-                chargingRateUnit: 'A',
-                duration: duration,
-                chargingSchedulePeriod: [{startPeriod: 0, limit: current}],
-              },
-            },
-          };
-          logger.debug({setChargingProfilePayload}, `SetChargingProfile payload for ${client.identity}`);
-
-          try {
-            const profileResponse = await sendRequestToClient(
-              client.identity,
-              'SetChargingProfile',
-              setChargingProfilePayload
-            );
-            logger.info({profileResponse}, `Charging profile applied for ${client.identity}`);
-          } catch (error) {
-            logger.error(error, `Failed to apply charging profile for ${client.identity}`);
-          }
-          pendingChargingProfiles.delete(identity);
-          logger.info(`Pending charging profile removed for ${client.identity}`);
-        } else {
-          logger.debug(`No pending charging profile for ${client.identity}`);
-        }
-      }
       return {};
     });
 
@@ -208,10 +162,11 @@ interface PendingChargingProfile {
     });
 
     client.handle('StartTransaction', async ({params}: any) => {
-      logger.info({params}, `StartTransaction received from ${identity}`);
+      logger.info({params}, `StartTransaction received from ${client.identity}`);
+
       const transaction: Transaction = {
-        transactionId: null,
-        identity: identity,
+        transactionId: null, // Will be set by the repository
+        identity: client.identity!,
         idTag: params.idTag,
         meterStart: params.meterStart,
         meterEnd: null,
@@ -222,19 +177,47 @@ interface PendingChargingProfile {
 
       try {
         const addedTransaction = await transactionRepository.addTransaction(transaction);
-        logger.info(`Transaction started for ${identity}: ${transaction.transactionId}`);
-        const pendingProfile: PendingChargingProfile | undefined = pendingChargingProfiles.get(identity);
-        if (pendingProfile) {
-          pendingChargingProfiles.set(identity, {
-            ...pendingProfile,
-            transactionId: addedTransaction.transactionId,
-          });
-          logger.debug(`Updated pending charging profile with transactionId for ${client.identity}`);
-        }
-        return {
-          transactionId: transaction.transactionId,
+        logger.info(`Transaction started for ${client.identity}: ${addedTransaction.transactionId}`);
+
+        const pendingProfile = pendingChargingProfiles.get(client.identity!);
+        const responsePayload = {
+          transactionId: addedTransaction.transactionId,
           idTagInfo: {status: 'Accepted'},
         };
+
+        // After sending response, asynchronously send the SetChargingProfile command
+        if (pendingProfile && !pendingProfile.transactionId) {
+          pendingProfile.transactionId = addedTransaction.transactionId;
+          setTimeout(async () => {
+            const setChargingProfilePayload = {
+              connectorId: 1,
+              csChargingProfiles: {
+                chargingProfileId: 12345,
+                stackLevel: 1,
+                chargingProfilePurpose: 'TxProfile',
+                chargingProfileKind: 'Absolute',
+                transactionId: addedTransaction.transactionId,
+                chargingSchedule: {
+                  chargingRateUnit: 'A',
+                  chargingSchedulePeriod: [{startPeriod: 0, limit: pendingProfile.current}],
+                },
+              },
+            };
+            try {
+              const profileResponse = await sendRequestToClient(
+                client.identity,
+                'SetChargingProfile',
+                setChargingProfilePayload
+              );
+              logger.info({profileResponse}, `Charging profile applied for ${client.identity}`);
+            } catch (error) {
+              logger.error(error, `Failed to apply charging profile for ${client.identity}`);
+            }
+            pendingChargingProfiles.delete(client.identity!);
+          }, 1000);
+        }
+
+        return responsePayload;
       } catch (err) {
         logger.error(err, `Failed to add transaction for ${client.identity}`);
         return {
@@ -293,8 +276,8 @@ interface PendingChargingProfile {
       meterValue: MeterValue[];
     }
 
-    client.handle('MeterValues', async ({ params }: any) => {
-      logger.info({ params }, `MeterValues received from ${identity}`);
+    client.handle('MeterValues', async ({params}: any) => {
+      logger.info({params}, `MeterValues received from ${identity}`);
       const param = params as MeterValuesParams;
       const totalPowerMeterValue = param.meterValue.find((meterValue: MeterValue) => {
         return meterValue.sampledValue.some((sampledValue: SampledValue) => {
