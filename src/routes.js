@@ -14,4 +14,9 @@ routes.get('/connected', (req, res) => {
   res.json({connectedClients: clients});
 });
 
+routes.get('/health', (req, res) => {
+  logger.info('[/health] Received request for health check.');
+  res.json({status: 'ok'});
+});
+
 export default routes;
