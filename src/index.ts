@@ -29,7 +29,7 @@ import router from './routes';
   });
 
   const httpServer = app.listen(config.port, '0.0.0.0', () => {
-    logger.info(`HTTP server listening on http://${config.host}:${config.port}`);
+    logger.info(`HTTP server listening on https://${config.host}:${config.port}`);
   });
 
   const connectionAttempts = new Map<string, number>();
@@ -96,11 +96,11 @@ import router from './routes';
               },
             };
             logger.debug({payload}, `Sending service creation`);
-            const url = (): string =>
+            const connectDeviceUrl = (): string =>
               config.nodeEnv === 'production'
                 ? `https://europe-west1-${charger.projectId}.cloudfunctions.net/connectOcppDevices`
                 : `http://127.0.0.1:5001/zerofy-energy-dev/europe-west1/connectOcppDevices`;
-            const response = await axios.post(url(), payload);
+            const response = await axios.post(connectDeviceUrl(), payload);
             const responseData = response.data;
             logger.debug({responseData}, `[BootNotification] Service creation response for userId ${charger.userId}`);
             if (response.status === 200) {

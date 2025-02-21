@@ -7,6 +7,8 @@ interface Config {
   logLevel: string;
   port: number;
   host: string;
+  ocppDomain: string;
+  ocppUrl: string;
 }
 
 const getEnvVar = (name: string, defaultValue?: string | number | boolean): string => {
@@ -21,11 +23,18 @@ const getEnvVar = (name: string, defaultValue?: string | number | boolean): stri
   return value;
 };
 
+const nodeEnv = getEnvVar('NODE_ENV', 'development');
+const port = Number(getEnvVar('PORT', '3000'));
+const ocppDomain = getEnvVar('OCPP_DOMAIN', 'ocppconnect.net');
+
 const config: Config = {
-  nodeEnv: getEnvVar('NODE_ENV', 'development'),
+  nodeEnv,
   logLevel: getEnvVar('LOG_LEVEL', 'info'),
-  port: Number(getEnvVar('PORT', '3000')),
+  port,
   host: getEnvVar('HOST', 'localhost'),
+  ocppDomain,
+  // If we're in development, use ws://localhost:<port>; otherwise use wss://<ocppDomain>
+  ocppUrl: nodeEnv === 'development' ? `ws://localhost:${port}` : `wss://${ocppDomain}`,
 };
 
 export default Object.freeze(config);
