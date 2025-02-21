@@ -15,7 +15,6 @@ routes.get('/connected', (req, res) => {
 });
 
 routes.get('/health', (req, res) => {
-  logger.info('[/health] Received request for health check.');
   res.json({status: 'ok'});
 });
 

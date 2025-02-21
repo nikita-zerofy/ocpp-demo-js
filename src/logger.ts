@@ -9,7 +9,7 @@ const logger: Logger = pino({
     target: 'pino-pretty',
     options: {
       translateTime: 'SYS:standard',
-      ignore: 'pid,hostname'
+      ignore: 'pid,hostname,req,res'
     }
   }
 });

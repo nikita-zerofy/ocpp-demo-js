@@ -17,7 +17,14 @@ import router from './routes';
     await initializeSQLiteRepositories();
 
   const app = express();
-  app.use(pinoHttp({logger}));
+  app.use(
+    pinoHttp({
+      logger,
+      autoLogging: {
+        ignore: (req) => req.url === '/health',
+      },
+    })
+  );
   app.use(express.json());
   app.use(createChargerRouter(chargerRepository, transactionRepository));
   app.use(createTransactionRouter(transactionRepository));
@@ -96,11 +103,11 @@ import router from './routes';
               },
             };
             logger.debug({payload}, `Sending service creation`);
-            const connectDeviceUrl = (): string =>
+            const url = (): string =>
               config.nodeEnv === 'production'
                 ? `https://europe-west1-${charger.projectId}.cloudfunctions.net/connectOcppDevices`
                 : `http://127.0.0.1:5001/zerofy-energy-dev/europe-west1/connectOcppDevices`;
-            const response = await axios.post(connectDeviceUrl(), payload);
+            const response = await axios.post(url(), payload);
             const responseData = response.data;
             logger.debug({responseData}, `[BootNotification] Service creation response for userId ${charger.userId}`);
             if (response.status === 200) {
